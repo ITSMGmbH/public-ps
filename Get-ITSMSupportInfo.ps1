@@ -2,7 +2,6 @@ $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogName = $env:USERPROFILE + "\Desktop\ITSM-SupportInfoLog-$env:computername-$NowString.txt"
 
 Write-Host "Please Wait..."
-Write-Host "."
 quser | out-file -Append -FilePath $DiagLogName 
 ipconfig /all | out-file -Append -FilePath $DiagLogName 
 route print | out-file -Append -FilePath $DiagLogName 
@@ -30,7 +29,7 @@ Write-Host "." -NoNewline
 Test-NetConnection google.de -Port 443 | fl | out-file -Append -FilePath $DiagLogName 
 Write-Host "." -NoNewline
 Test-NetConnection google.de -TraceRoute | fl | out-file -Append -FilePath $DiagLogName 
-Write-Host "." -NoNewline
+Write-Host "."
 Test-NetConnection 8.8.8.8 -TraceRoute | fl | out-file -Append -FilePath $DiagLogName 
 
 systeminfo | out-file -Append -FilePath $DiagLogName 
