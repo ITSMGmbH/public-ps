@@ -1,6 +1,5 @@
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogName = $env:USERPROFILE + "\Desktop\ITSM-SupportInfoLog-$env:computername-$NowString.txt"
-$WarningPreference = "SilentlyContinue"
 
 Write-Host "Please Wait..."
 Write-Host "."
