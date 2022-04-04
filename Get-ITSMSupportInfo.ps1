@@ -32,6 +32,10 @@ Test-NetConnection google.de -TraceRoute | fl | out-file -Append -FilePath $Diag
 Write-Host "."
 Test-NetConnection 8.8.8.8 -TraceRoute | fl | out-file -Append -FilePath $DiagLogName 
 
+Write-Host "."
+Write-Host "Public IP:" | out-file -Append -FilePath $DiagLogName 
+((Invoke-WebRequest 'https://api.myip.com/').content | ConvertFrom-Json).ip | out-file -Append -FilePath $DiagLogName 
+
 systeminfo | out-file -Append -FilePath $DiagLogName 
 
 Write-Host "Finished. Log written to $DiagLogName"
