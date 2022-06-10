@@ -1,41 +1,98 @@
+Clear-Host
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogName = $env:USERPROFILE + "\Desktop\ITSM-SupportInfoLog-$env:computername-$NowString.txt"
+Start-Transcript -Path $DiagLogName 
+
+function Get-Connectivity {
+    param (
+        $Target,
+        $Type = "icmp",
+        $Port
+    )
+    if($type -eq "icmp")
+    {
+        Write-Host "Pinging $Target..." -BackgroundColor Cyan -ForegroundColor black 
+        $test = Test-NetConnection $Target
+        if($test.PingSucceeded -eq "True") { 
+            Write-Host "Ping $Target succeeded" -BackgroundColor Green -ForegroundColor black 
+        }
+        else {
+            Write-Host "Ping $Target failed" -BackgroundColor Red -ForegroundColor White
+        }
+    }
+    elseif($type -eq "tcp") {
+        Write-Host "TcpTest $Target TCP Port $Port..." -BackgroundColor Cyan -ForegroundColor black 
+        $test = Test-NetConnection $Target -Port $Port 
+        if($test.TcpTestSucceeded -eq "True") { 
+            Write-Host "TcpTest $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
+        }
+        else {
+            Write-Host "TcpTest $Target $Port failed" -BackgroundColor Red -ForegroundColor White
+        }
+    }
+    elseif($type -eq "traceroute") {
+        Write-Host "Traceroute $Target..." -BackgroundColor Cyan -ForegroundColor black 
+        $test = Test-NetConnection $Target -TraceRoute
+        if($test.PingSucceeded -eq "True") { 
+            Write-Host "TraceRoute $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
+        }
+        else {
+            Write-Host "TraceRoute $Target $Port failed" -BackgroundColor Red -ForegroundColor White
+        }
+    }
+    else {
+        throw "Type not specified"
+    }
+    $test | Format-List
+}
+
 
 Write-Host "Please Wait..."
-quser | out-file -Append -FilePath $DiagLogName 
-ipconfig /all | out-file -Append -FilePath $DiagLogName 
-route print | out-file -Append -FilePath $DiagLogName 
-$NetIPConfiguration = Get-NetIPConfiguration
 
-$dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer).ServerAddresses | select -Unique
+Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
+systeminfo
+
+Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black 
+quser
+
+Write-Host "`nIPConfig" -BackgroundColor Cyan -ForegroundColor black 
+ipconfig /all
+
+Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black 
+route print
+
+Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
+$NetIPConfiguration = Get-NetIPConfiguration | Where-Object { $_.InterfaceDescription -notlike "*Hyper-V*" }
+
+$dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
 foreach ($dnsserver in $dnsservers) {
-    Write-Host "." -NoNewline
-    Test-NetConnection $dnsserver | fl | out-file -Append -FilePath $DiagLogName 
-    Resolve-DnsName -Name vpn.itsm.de -Server $address | out-file -Append -FilePath $DiagLogName 
+    Get-Connectivity -Target $dnsserver
+    
+    Write-Host "Test DNS Server $dnsserver resolve vpn.itsm.de" -BackgroundColor Cyan -ForegroundColor black 
+    Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
 }
 
 $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
 foreach($Gateway in $Gateways)
 {
-    Write-Host "." -NoNewline
-    Test-NetConnection $Gateway | fl | out-file -Append -FilePath $DiagLogName 
+    Get-Connectivity -Target $Gateway
 }
 
-Write-Host "." -NoNewline
-Test-NetConnection vpn.itsm.de -Port 443  | fl | out-file -Append -FilePath $DiagLogName
-Write-Host "." -NoNewline
-Test-NetConnection vpn.itsm.de -TraceRoute | fl | out-file -Append -FilePath $DiagLogName 
-Write-Host "." -NoNewline
-Test-NetConnection google.de -Port 443 | fl | out-file -Append -FilePath $DiagLogName 
-Write-Host "." -NoNewline
-Test-NetConnection google.de -TraceRoute | fl | out-file -Append -FilePath $DiagLogName 
-Write-Host "."
-Test-NetConnection 8.8.8.8 -TraceRoute | fl | out-file -Append -FilePath $DiagLogName 
+Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443
+Get-Connectivity -Target vpn.itsm.de -type traceroute
+Get-Connectivity -Target google.de -type tcp -Port 443
+Get-Connectivity -Target google.de -type traceroute
+Get-Connectivity -Target 8.8.8.8 -type traceroute
 
-Write-Host "."
-Write-Host "Public IP:" | out-file -Append -FilePath $DiagLogName 
-((Invoke-WebRequest 'https://api.myip.com/').content | ConvertFrom-Json).ip | out-file -Append -FilePath $DiagLogName 
+Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
+((Invoke-WebRequest 'https://api.myip.com/').content | ConvertFrom-Json).ip
 
-systeminfo | out-file -Append -FilePath $DiagLogName 
+Write-Host "`nSpeedTest" -BackgroundColor Cyan -ForegroundColor black 
 
-Write-Host "Finished. Log written to $DiagLogName"
+#100M Testfile
+$size = "100"
+$in = "http://speedtest.frankfurt.linode.com/garbage.php?r=0.29286396544417626&ckSize=" + $size
+$out = $env:temp +"\speedtest.bin"
+$wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Command {$wc.Downloadfile($in,$out)}).TotalSeconds)*8); del $out
+
+Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
