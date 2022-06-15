@@ -1,3 +1,15 @@
+#########
+# Autor: (c) Marco.Hahnen@ITSM.de
+# Zweck: Collect Support Infos
+# Version: 1.0
+# Read: https://docs.itsm.de/display/~hahnenmarco/Get+ITSM+Support+Info
+# Prerequisites:
+# - nothing
+# ChangeLog
+# - 1.0 first release
+# ToDo
+# - nothing
+########## 
 Clear-Host
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogName = $env:USERPROFILE + "\Desktop\ITSM-SupportInfoLog-$env:computername-$NowString.txt"
@@ -46,14 +58,42 @@ function Get-Connectivity {
     $test | Format-List
 }
 
+function Test-Administrator  
+{  
+    $user = [Security.Principal.WindowsIdentity]::GetCurrent();
+    return (New-Object Security.Principal.WindowsPrincipal $user).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)  
+}
 
 Write-Host "Please Wait..."
+
+Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black 
+if(Test-Administrator)
+{
+    write-host "User is admin" -BackgroundColor Green -ForegroundColor black 
+}
+else
+{
+    write-host "User is not admin" -BackgroundColor Red -ForegroundColor White
+}
 
 Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
 systeminfo
 
 Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black 
 quser
+
+Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
+if(Test-Administrator)
+{
+    Get-Process -IncludeUserName 
+}
+else
+{
+    Get-Process
+}
+
+Write-Host "`nServices" -BackgroundColor Cyan -ForegroundColor black 
+Get-Service | ft
 
 Write-Host "`nIPConfig" -BackgroundColor Cyan -ForegroundColor black 
 ipconfig /all
