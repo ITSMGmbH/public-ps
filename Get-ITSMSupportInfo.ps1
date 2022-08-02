@@ -11,9 +11,17 @@
 # - nothing
 ########## 
 Clear-Host
+
 $NowString = get-date -Format "MMddyyyy-HHmmss"
-$DiagLogName = $env:USERPROFILE + "\Desktop\ITSM-SupportInfoLog-$env:computername-$NowString.txt"
-Start-Transcript -Path $DiagLogName 
+$DiagLogFolder = "$env:USERPROFILE\Desktop\ITSM-SupportInfoLog"
+$DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
+
+Stop-Transcript -ErrorAction SilentlyContinue
+Start-Transcript -Path $DiagLogName
+
+if( !(Test-Path $DiagLogFolder) ) {
+    New-Item -ItemType Directory $DiagLogFolder
+}
 
 function Get-Connectivity {
     param (
@@ -135,4 +143,14 @@ $in = "http://speedtest.frankfurt.linode.com/garbage.php?r=0.29286396544417626&c
 $out = $env:temp +"\speedtest.bin"
 $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Command {$wc.Downloadfile($in,$out)}).TotalSeconds)*8); del $out
 
+$eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
+
+foreach ($eventlogFile in $eventlogFiles) {
+    Write-Host $eventlogFile.LogFileName
+    $path= "$DiagLogFolder\$($eventlogFile.LogFileName).evtx"
+    $eventlogFile.BackupEventlog($path)
+}
+
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
+
+Stop-Transcript
