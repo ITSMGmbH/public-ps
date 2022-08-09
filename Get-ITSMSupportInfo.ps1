@@ -19,17 +19,35 @@ $DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
 Stop-Transcript -ErrorAction SilentlyContinue
 Start-Transcript -Path $DiagLogName
 
+$htmlHead = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>HTML TABLE</title>
+</head><body>'
+
+$htmlEnd = '</body></html>'
+
+$htmlFolder= "$DiagLogFolder\html"
+
 $connectivitySummerys= @()
 
 if( !(Test-Path $DiagLogFolder) ) {
     New-Item -ItemType Directory $DiagLogFolder
 }
 
+if( !(Test-Path $htmlFolder) ) {
+    New-Item -ItemType Directory $htmlFolder
+}
+
+$htmlFilePath = "$htmlFolder\report.html"
+$htmlHead | Out-File -LiteralPath $htmlFilePath -Force
+
 function Get-Connectivity {
     param (
         $Target,
         $Type = "icmp",
-        $Port
+        $Port,
+        $Note = "n/a"
     )
     $status = ""
 
@@ -39,7 +57,7 @@ function Get-Connectivity {
             $test = Test-NetConnection $Target
             if($test.PingSucceeded -eq "True") { 
                 Write-Host "Ping $Target succeeded" -BackgroundColor Green -ForegroundColor black 
-                $status = "sucess"
+                $status = "success"
             }
             else {
                 Write-Host "Ping $Target failed" -BackgroundColor Red -ForegroundColor White
@@ -53,7 +71,7 @@ function Get-Connectivity {
             $test = Test-NetConnection $Target -Port $Port 
             if($test.TcpTestSucceeded -eq "True") { 
                 Write-Host "TcpTest $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
-                $status = "sucess"
+                $status = "success"
             }
             else {
                 Write-Host "TcpTest $Target $Port failed" -BackgroundColor Red -ForegroundColor White
@@ -67,7 +85,7 @@ function Get-Connectivity {
             $test = Test-NetConnection $Target -TraceRoute
             if($test.PingSucceeded -eq "True") { 
                 Write-Host "TraceRoute $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
-                $status = "sucess"
+                $status = "success"
             }
             else {
                 Write-Host "TraceRoute $Target $Port failed" -BackgroundColor Red -ForegroundColor White
@@ -88,15 +106,38 @@ function Get-Connectivity {
     Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Target -Value $Target
     Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Type -Value $Type
     Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Status -Value $status
+    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Note -Value $Note
 
 
     return $connectivitySummery
 }
-
 function Test-Administrator  
 {  
     $user = [Security.Principal.WindowsIdentity]::GetCurrent();
     return (New-Object Security.Principal.WindowsPrincipal $user).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)  
+}
+
+function HtmlHeading {
+    param (
+        $text,
+        $size="3"
+    )
+    $htmlText = "<h$size>$text</h$size>"
+    return $htmlText
+}
+
+function AppendReport {
+    param (
+        $content,
+        $raw=$false
+    )
+
+    if($raw) {
+        $content | Out-File $htmlFilePath -Append
+    }else {
+        $content | ConvertTo-Html -Fragment | Out-File $htmlFilePath -Append
+    }
+    
 }
 
 Write-Host "Please Wait..."
@@ -142,7 +183,7 @@ $NetIPConfiguration = Get-NetIPConfiguration | Where-Object { $_.InterfaceDescri
 $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
 foreach ($dnsserver in $dnsservers) {
 
-    $connectivitySummerys += (Get-Connectivity -Target $dnsserver)
+    $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
     
     Write-Host "Test DNS Server $dnsserver resolve vpn.itsm.de" -BackgroundColor Cyan -ForegroundColor black 
     Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
@@ -151,14 +192,19 @@ foreach ($dnsserver in $dnsservers) {
 $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
 foreach($Gateway in $Gateways)
 {
-    $connectivitySummerys += (Get-Connectivity -Target $Gateway)
+    $connectivitySummerys += (Get-Connectivity -Target $Gateway -Note "Gateway")
 }
 
-$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443)
-$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute)
-$connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443)
-$connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute)
-$connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute)
+$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
+$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
+$connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
+$connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
+$connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
+
+AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw $true
+AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
+AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw $true
+AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
 ((Invoke-WebRequest 'https://api.myip.com/').content | ConvertFrom-Json).ip
@@ -180,5 +226,7 @@ foreach ($eventlogFile in $eventlogFiles) {
 }
 
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
+
+$htmlEnd | Out-File $htmlFilePath -Append
 
 Stop-Transcript
