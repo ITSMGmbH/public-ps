@@ -19,6 +19,8 @@ $DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
 Stop-Transcript -ErrorAction SilentlyContinue
 Start-Transcript -Path $DiagLogName
 
+$connectivitySummerys= @()
+
 if( !(Test-Path $DiagLogFolder) ) {
     New-Item -ItemType Directory $DiagLogFolder
 }
@@ -29,41 +31,66 @@ function Get-Connectivity {
         $Type = "icmp",
         $Port
     )
-    if($type -eq "icmp")
-    {
-        Write-Host "Pinging $Target..." -BackgroundColor Cyan -ForegroundColor black 
-        $test = Test-NetConnection $Target
-        if($test.PingSucceeded -eq "True") { 
-            Write-Host "Ping $Target succeeded" -BackgroundColor Green -ForegroundColor black 
+    $status = ""
+
+    switch ($type) {
+        "icmp" { 
+            Write-Host "Pinging $Target..." -BackgroundColor Cyan -ForegroundColor black 
+            $test = Test-NetConnection $Target
+            if($test.PingSucceeded -eq "True") { 
+                Write-Host "Ping $Target succeeded" -BackgroundColor Green -ForegroundColor black 
+                $status = "sucess"
+            }
+            else {
+                Write-Host "Ping $Target failed" -BackgroundColor Red -ForegroundColor White
+                $status = "failed"
+            }
+
+            break
         }
-        else {
-            Write-Host "Ping $Target failed" -BackgroundColor Red -ForegroundColor White
+        "tcp" {
+            Write-Host "TcpTest $Target TCP Port $Port..." -BackgroundColor Cyan -ForegroundColor black 
+            $test = Test-NetConnection $Target -Port $Port 
+            if($test.TcpTestSucceeded -eq "True") { 
+                Write-Host "TcpTest $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
+                $status = "sucess"
+            }
+            else {
+                Write-Host "TcpTest $Target $Port failed" -BackgroundColor Red -ForegroundColor White
+                $status = "failed"
+            }
+
+            break
+        }
+        "traceroute" {
+            Write-Host "Traceroute $Target..." -BackgroundColor Cyan -ForegroundColor black 
+            $test = Test-NetConnection $Target -TraceRoute
+            if($test.PingSucceeded -eq "True") { 
+                Write-Host "TraceRoute $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
+                $status = "sucess"
+            }
+            else {
+                Write-Host "TraceRoute $Target $Port failed" -BackgroundColor Red -ForegroundColor White
+                $status = "failed"
+            }
+
+            break
+        }
+        Default {
+            throw "Type not specified"
         }
     }
-    elseif($type -eq "tcp") {
-        Write-Host "TcpTest $Target TCP Port $Port..." -BackgroundColor Cyan -ForegroundColor black 
-        $test = Test-NetConnection $Target -Port $Port 
-        if($test.TcpTestSucceeded -eq "True") { 
-            Write-Host "TcpTest $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
-        }
-        else {
-            Write-Host "TcpTest $Target $Port failed" -BackgroundColor Red -ForegroundColor White
-        }
-    }
-    elseif($type -eq "traceroute") {
-        Write-Host "Traceroute $Target..." -BackgroundColor Cyan -ForegroundColor black 
-        $test = Test-NetConnection $Target -TraceRoute
-        if($test.PingSucceeded -eq "True") { 
-            Write-Host "TraceRoute $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
-        }
-        else {
-            Write-Host "TraceRoute $Target $Port failed" -BackgroundColor Red -ForegroundColor White
-        }
-    }
-    else {
-        throw "Type not specified"
-    }
-    $test | Format-List
+    
+    Write-Host $test | Format-List
+
+    $connectivitySummery = New-Object -TypeName psobject 
+
+    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Target -Value $Target
+    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Type -Value $Type
+    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Status -Value $status
+
+
+    return $connectivitySummery
 }
 
 function Test-Administrator  
@@ -114,7 +141,8 @@ $NetIPConfiguration = Get-NetIPConfiguration | Where-Object { $_.InterfaceDescri
 
 $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
 foreach ($dnsserver in $dnsservers) {
-    Get-Connectivity -Target $dnsserver
+
+    $connectivitySummerys += (Get-Connectivity -Target $dnsserver)
     
     Write-Host "Test DNS Server $dnsserver resolve vpn.itsm.de" -BackgroundColor Cyan -ForegroundColor black 
     Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
@@ -123,14 +151,14 @@ foreach ($dnsserver in $dnsservers) {
 $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
 foreach($Gateway in $Gateways)
 {
-    Get-Connectivity -Target $Gateway
+    $connectivitySummerys += (Get-Connectivity -Target $Gateway)
 }
 
-Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443
-Get-Connectivity -Target vpn.itsm.de -type traceroute
-Get-Connectivity -Target google.de -type tcp -Port 443
-Get-Connectivity -Target google.de -type traceroute
-Get-Connectivity -Target 8.8.8.8 -type traceroute
+$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443)
+$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute)
+$connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443)
+$connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute)
+$connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute)
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
 ((Invoke-WebRequest 'https://api.myip.com/').content | ConvertFrom-Json).ip
