@@ -12,6 +12,15 @@
 ########## 
 Clear-Host
 
+$logLevel = 3
+
+# Verbose 	    5
+# Informational 4
+# Warning 	    3
+# Error 	    2
+# Critical 	    1
+# LogAlways 	0
+
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFolder = "$env:USERPROFILE\Desktop\ITSM-SupportInfoLog"
 $DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
@@ -285,6 +294,21 @@ foreach ($eventlogFile in $eventlogFiles) {
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName).evtx"
     $eventlogFile.BackupEventlog($path)
 }
+
+
+
+
+$eventLogs = Get-WinEvent -ListLog * -EA silentlycontinue
+$recentEventLogs = $eventLogs | where-object { $_.recordcount -AND $_.lastwritetime -gt ( (get-date).AddHours(-5) ) }
+$recentEvents = ( $recentEventLogs | foreach-object {
+    Get-WinEvent -FilterHashtable @{
+        LogName=$_.LogName
+        Level=$logLevel
+    } -MaxEvents 15 -ErrorAction SilentlyContinue
+})
+
+AppendReport -content (HtmlHeading -text "Recent Events") -raw
+AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible
 
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
 
