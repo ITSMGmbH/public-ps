@@ -19,13 +19,24 @@ $DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
 Stop-Transcript -ErrorAction SilentlyContinue
 Start-Transcript -Path $DiagLogName
 
-$htmlHead = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-<title>HTML TABLE</title>
-</head><body>'
+$css = (Invoke-WebRequest "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
+$js = (Invoke-WebRequest "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
 
-$htmlEnd = '</body></html>'
+$htmlHead = "
+<html>
+<head>
+<style>
+$css
+</style>
+<title>Report</title>
+</head><body>"
+
+$htmlEnd = "
+<script>
+$js
+</script
+</body>
+</html>"
 
 $htmlFolder= "$DiagLogFolder\html"
 
@@ -136,13 +147,25 @@ function HtmlHeading {
 function AppendReport {
     param (
         $content,
-        [switch]$raw
+        [switch]$raw,
+        [switch]$collapsible,
+        $collapsibleTitle = "Expand"
     )
+
+    if($collapsible) {
+        $html = "<button type=`"button`" class=`"collapsible`">$collapsibleTitle</button>
+        <div class=`"content`">"
+        $html | Out-File $htmlFilePath -Append
+    }
 
     if($raw) {
         $content | Out-File $htmlFilePath -Append
     }else {
         $content | ConvertTo-Html -Fragment | Out-File $htmlFilePath -Append
+    }
+
+    if($collapsible) {
+        "</div>" | Out-File $htmlFilePath -Append
     }
     
 }
@@ -202,7 +225,7 @@ Write-Host "`nServices" -BackgroundColor Cyan -ForegroundColor black
 Get-Service | ft
 
 AppendReport -content (HtmlHeading -text "Services") -raw
-AppendReport -content (Get-Service | Select-Object DisplayName, ServiceName, Status, StartType)
+AppendReport -content (Get-Service | Select-Object DisplayName, ServiceName, Status, StartType) -collapsible
 
 Write-Host "`nIPConfig" -BackgroundColor Cyan -ForegroundColor black 
 ipconfig /all
