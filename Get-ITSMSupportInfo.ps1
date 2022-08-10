@@ -227,6 +227,9 @@ Get-Service | ft
 AppendReport -content (HtmlHeading -text "Services") -raw
 AppendReport -content (Get-Service | Select-Object DisplayName, ServiceName, Status, StartType) -collapsible
 
+AppendReport -content (HtmlHeading -text "Stopped Auto Services") -raw
+AppendReport -content (Get-Service | Where-Object {$_.StartType -like "*auto*" -and $_.Status -like "*stop*" } | Select-Object DisplayName, ServiceName, Status, StartType)
+
 Write-Host "`nIPConfig" -BackgroundColor Cyan -ForegroundColor black 
 ipconfig /all
 
