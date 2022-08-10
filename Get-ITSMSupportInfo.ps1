@@ -31,6 +31,13 @@ $htmlFolder= "$DiagLogFolder\html"
 
 $connectivitySummerys= @()
 
+$generalSummery = New-Object -TypeName psobject 
+Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name hostname -Value $null
+Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name isAdmin -Value $null
+Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name Uptime -Value $null
+Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name lastBootTime -Value $null
+#Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name loggedOnUsers -Value $null
+
 if( !(Test-Path $DiagLogFolder) ) {
     New-Item -ItemType Directory $DiagLogFolder
 }
@@ -129,7 +136,7 @@ function HtmlHeading {
 function AppendReport {
     param (
         $content,
-        $raw=$false
+        [switch]$raw
     )
 
     if($raw) {
@@ -146,17 +153,40 @@ Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black
 if(Test-Administrator)
 {
     write-host "User is admin" -BackgroundColor Green -ForegroundColor black 
+    $generalSummery.isAdmin = $true
 }
 else
 {
     write-host "User is not admin" -BackgroundColor Red -ForegroundColor White
+    $generalSummery.isAdmin = $false
 }
 
 Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
 systeminfo
 
+$systeminfo = Get-ComputerInfo
+
+$uptime = $systeminfo.OsUptime.toString()
+$utHours = $uptime.Split('.')[0]
+$utMinutes = $uptime.Split('.')[1].Split(':')[0]
+$generalSummery.Uptime = "$utHours h, $utMinutes min"
+$generalSummery.lastBootTime = $systeminfo.OsLastBootUpTime
+$generalSummery.hostname = $systeminfo.CsCaption
+
+
+
 Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black 
 quser
+
+# $quserstring = ""
+# foreach ($line in quser) {
+#     $quserstring += "$line`n"
+# }
+
+# $generalSummery.loggedOnUsers = $quserstring
+
+AppendReport -content (HtmlHeading -text "General info") -raw
+AppendReport -content $generalSummery
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
@@ -171,8 +201,13 @@ else
 Write-Host "`nServices" -BackgroundColor Cyan -ForegroundColor black 
 Get-Service | ft
 
+AppendReport -content (HtmlHeading -text "Services") -raw
+AppendReport -content (Get-Service | Select-Object DisplayName, ServiceName, Status, StartType)
+
 Write-Host "`nIPConfig" -BackgroundColor Cyan -ForegroundColor black 
 ipconfig /all
+
+
 
 Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black 
 route print
@@ -201,9 +236,9 @@ $connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443
 $connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
 $connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
 
-AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw $true
+AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
 AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
-AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw $true
+AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
 AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
@@ -228,5 +263,7 @@ foreach ($eventlogFile in $eventlogFiles) {
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
 
 $htmlEnd | Out-File $htmlFilePath -Append
+
+Start-Process "file:///$htmlFilePath"
 
 Stop-Transcript
