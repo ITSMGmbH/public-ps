@@ -28,8 +28,8 @@ $DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
 Stop-Transcript -ErrorAction SilentlyContinue
 Start-Transcript -Path $DiagLogName
 
-$css = (Invoke-WebRequest "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
-$js = (Invoke-WebRequest "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
+$css = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
+$js = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
 
 $htmlHead = "
 <html>
