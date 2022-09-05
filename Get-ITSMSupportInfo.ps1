@@ -12,7 +12,7 @@
 ########## 
 Clear-Host
 
-$logLevel = 3
+$logLevel = 2
 
 # Verbose 	    5
 # Informational 4
