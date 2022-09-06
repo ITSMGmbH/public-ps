@@ -14,6 +14,8 @@ Clear-Host
 
 $DebugPreference = "SilentlyContinue" # Stop, Inquire, Continue, SilentlyContinue
 
+$timeDifferencethreshold = 2 # Minutes
+
 $logLevel = 2
 
 # Verbose 	    5
@@ -322,6 +324,18 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
 AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible
+
+AppendReport -content (HtmlHeading -text "Problems detected") -raw
+
+$networktimeInfo = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
+$networktime = Get-Date  $networktimeInfo.datetime 
+$localtime = Get-Date
+$timeDifference = [math]::Abs( ( ($networktime) - ($localtime) ).TotalMinutes)
+
+
+if( $timeDifference -gt $timeDifferencethreshold) {
+    AppendReport -content "Time Difference $timeDifference Minutes"
+}
 
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
 
