@@ -25,8 +25,15 @@ $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFolder = "$env:USERPROFILE\Desktop\ITSM-SupportInfoLog"
 $DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
 
-Stop-Transcript -ErrorAction SilentlyContinue
+try {
+    Stop-Transcript
+}
+catch [System.Management.Automation.PSInvalidOperationException] {
+
+}
+
 Start-Transcript -Path $DiagLogName
+exit
 
 $css = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
 $js = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
