@@ -12,6 +12,8 @@
 ########## 
 Clear-Host
 
+$DebugPreference = "SilentlyContinue" # Stop, Inquire, Continue, SilentlyContinue
+
 $logLevel = 2
 
 # Verbose 	    5
@@ -20,6 +22,13 @@ $logLevel = 2
 # Error 	    2
 # Critical 	    1
 # LogAlways 	0
+
+$showDebug
+if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
+    $showDebug = $true
+}else {
+    $showDebug = $false
+}
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFolder = "$env:USERPROFILE\Desktop\ITSM-SupportInfoLog"
@@ -33,7 +42,6 @@ catch [System.Management.Automation.PSInvalidOperationException] {
 }
 
 Start-Transcript -Path $DiagLogName
-exit
 
 $css = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
 $js = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
@@ -87,42 +95,42 @@ function Get-Connectivity {
 
     switch ($type) {
         "icmp" { 
-            Write-Host "Pinging $Target..." -BackgroundColor Cyan -ForegroundColor black 
+            Write-Debug "Pinging $Target..."
             $test = Test-NetConnection $Target
             if($test.PingSucceeded -eq "True") { 
-                Write-Host "Ping $Target succeeded" -BackgroundColor Green -ForegroundColor black 
+                Write-Debug "Ping $Target succeeded"
                 $status = "success"
             }
             else {
-                Write-Host "Ping $Target failed" -BackgroundColor Red -ForegroundColor White
+                Write-Debug "Ping $Target failed"
                 $status = "failed"
             }
 
             break
         }
         "tcp" {
-            Write-Host "TcpTest $Target TCP Port $Port..." -BackgroundColor Cyan -ForegroundColor black 
+            Write-Debug "TcpTest $Target TCP Port $Port..."
             $test = Test-NetConnection $Target -Port $Port 
             if($test.TcpTestSucceeded -eq "True") { 
-                Write-Host "TcpTest $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
+                Write-Debug "TcpTest $Target $Port succeeded"
                 $status = "success"
             }
             else {
-                Write-Host "TcpTest $Target $Port failed" -BackgroundColor Red -ForegroundColor White
+                Write-Debug "TcpTest $Target $Port failed"
                 $status = "failed"
             }
 
             break
         }
         "traceroute" {
-            Write-Host "Traceroute $Target..." -BackgroundColor Cyan -ForegroundColor black 
+            Write-Debug "Traceroute $Target..."
             $test = Test-NetConnection $Target -TraceRoute
             if($test.PingSucceeded -eq "True") { 
-                Write-Host "TraceRoute $Target $Port succeeded" -BackgroundColor Green -ForegroundColor black 
+                Write-Debug "TraceRoute $Target $Port succeeded"
                 $status = "success"
             }
             else {
-                Write-Host "TraceRoute $Target $Port failed" -BackgroundColor Red -ForegroundColor White
+                Write-Debug "TraceRoute $Target $Port failed"
                 $status = "failed"
             }
 
@@ -191,17 +199,17 @@ Write-Host "Please Wait..."
 Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
 {
-    write-host "User is admin" -BackgroundColor Green -ForegroundColor black 
+    Write-Debug "User is admin"
     $generalSummery.isAdmin = $true
 }
 else
 {
-    write-host "User is not admin" -BackgroundColor Red -ForegroundColor White
+    Write-Debug "User is not admin"
     $generalSummery.isAdmin = $false
 }
 
 Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
-systeminfo
+Write-Debug systeminfo
 
 $systeminfo = Get-ComputerInfo
 
@@ -217,13 +225,6 @@ $generalSummery.hostname = $systeminfo.CsCaption
 Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black 
 quser
 
-# $quserstring = ""
-# foreach ($line in quser) {
-#     $quserstring += "$line`n"
-# }
-
-# $generalSummery.loggedOnUsers = $quserstring
-
 AppendReport -content (HtmlHeading -text "General info") -raw
 AppendReport -content $generalSummery
 
@@ -238,7 +239,10 @@ else
 }
 
 Write-Host "`nServices" -BackgroundColor Cyan -ForegroundColor black 
-Get-Service | ft
+
+if($showDebug) {
+    Get-Service | Format-Table
+}
 
 AppendReport -content (HtmlHeading -text "Services") -raw
 AppendReport -content (Get-Service | Select-Object DisplayName, ServiceName, Status, StartType) -collapsible
@@ -262,8 +266,10 @@ foreach ($dnsserver in $dnsservers) {
 
     $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
     
-    Write-Host "Test DNS Server $dnsserver resolve vpn.itsm.de" -BackgroundColor Cyan -ForegroundColor black 
-    Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
+    Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
+    if($showDebug) {
+        Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
+    }
 }
 
 $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
@@ -297,7 +303,7 @@ $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Comma
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 
 foreach ($eventlogFile in $eventlogFiles) {
-    Write-Host $eventlogFile.LogFileName
+    Write-Debug $eventlogFile.LogFileName
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName).evtx"
     $eventlogFile.BackupEventlog($path)
 }
