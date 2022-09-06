@@ -292,7 +292,7 @@ AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
 AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
-((Invoke-WebRequest 'https://api.myip.com/').content | ConvertFrom-Json).ip
+((Invoke-WebRequest -UseBasicParsing 'https://api.myip.com/').content | ConvertFrom-Json).ip
 
 Write-Host "`nSpeedTest" -BackgroundColor Cyan -ForegroundColor black 
 
