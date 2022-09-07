@@ -220,7 +220,7 @@ function Send-OutlookMail {
 
     if(!$failed) {
         $Mail = $Outlook.CreateItem(0)
-        $Mail.Subject = $subject
+        $Mail.subject=$subject
         $Mail.To = $to
         $Mail.Body = $body 
         $Mail.Attachments.Add($attachments)
@@ -243,7 +243,7 @@ function Send-Mail {
     if($null -eq $from) {
         $from = Read-Host -Prompt "Enter From Address"
     }
-    
+
     $domain = $from.split('@')[1]
     $smtpServer = Resolve-DnsName -Type MX -Name $domain
 
