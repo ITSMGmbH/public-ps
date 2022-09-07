@@ -12,7 +12,7 @@
 ########## 
 Clear-Host
 
-$DebugPreference = "SilentlyContinue" # Stop, Inquire, Continue, SilentlyContinue
+$DebugPreference = "Continue" # Stop, Inquire, Continue, SilentlyContinue
 
 $timeDifferencethreshold = 2 # Minutes
 
@@ -196,6 +196,74 @@ function AppendReport {
     
 }
 
+function Send-OutlookMail {
+    param (
+        $subject="ITSM Support Script",
+        $to= "support@itsm.de",
+        $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
+        $attachments = "$DiagLogFolder\archive.zip"
+    )
+
+    $returncode = 0
+
+    $failed = $false
+    try {
+        $Outlook = New-Object -ComObject Outlook.Application
+    }catch [System.Runtime.InteropServices.COMException] {
+        $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
+        $returncode = $HREsult
+        $failed = $true
+    }catch {
+        $returncode = -1
+        $failed = $true
+    }
+
+    if(!$failed) {
+        $Mail = $Outlook.CreateItem(0)
+        $Mail.Subject = $subject
+        $Mail.To = $to
+        $Mail.Body = $body 
+        $Mail.Attachments.Add($attachments)
+        $Mail.send()
+    }
+
+    return $returncode
+    
+}
+
+function Send-Mail {
+    param (
+        $subject="ITSM Support Script",
+        $to= "support@itsm.de",
+        $from,
+        $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
+        $attachments = "$DiagLogFolder\archive.zip"
+    )
+
+    if($null -eq $from) {
+        $from = Read-Host -Prompt "Enter From Address"
+    }
+    
+    $domain = $from.split('@')[1]
+    $smtpServer = Resolve-DnsName -Type MX -Name $domain
+
+    $mailCred = Get-Credential -Message "Enter Mail Credentials" -UserName $from
+    
+    $returncode = 0
+    try {
+        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer ($smtpServer.ip4address) -Attachments $attachments -UseSsl -Credential $mailCred
+    }catch [System.Net.Mail.SmtpException] {
+        $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
+        $returncode = $HREsult
+    }
+    catch {
+        $returncode = -1
+    }
+
+    return $returncode   
+    
+}
+
 Write-Host "Please Wait..."
 
 Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black 
@@ -263,33 +331,36 @@ route print
 Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
 $NetIPConfiguration = Get-NetIPConfiguration | Where-Object { $_.InterfaceDescription -notlike "*Hyper-V*" }
 
-$dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
-foreach ($dnsserver in $dnsservers) {
+if(!$skipConnectivityTests) {
 
-    $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
+    $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
+    foreach ($dnsserver in $dnsservers) {
     
-    Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
-    if($showDebug) {
-        Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
+        $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
+        
+        Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
+        if($showDebug) {
+            Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
+        }
     }
+    
+    $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
+    foreach($Gateway in $Gateways)
+    {
+        $connectivitySummerys += (Get-Connectivity -Target $Gateway -Note "Gateway")
+    }
+    
+    $connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
+    $connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
+    $connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
+    $connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
+    $connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
+    
+    AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
+    AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
+    AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
+    AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
 }
-
-$Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
-foreach($Gateway in $Gateways)
-{
-    $connectivitySummerys += (Get-Connectivity -Target $Gateway -Note "Gateway")
-}
-
-$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
-
-AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
-AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
-AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
-AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
 ((Invoke-WebRequest -UseBasicParsing 'https://api.myip.com/').content | ConvertFrom-Json).ip
@@ -344,3 +415,36 @@ $htmlEnd | Out-File $htmlFilePath -Append
 Start-Process "file:///$htmlFilePath"
 
 Stop-Transcript
+
+Compress-Archive $DiagLogFolder -DestinationPath ("$DiagLogFolder\archive.zip") -Force
+
+$sent = $false
+switch ( (Send-OutlookMail) ) {
+    0 {
+        Write-Debug "Mail send succesfully"
+        $sent = $true
+    }
+    "80040154" {
+        Write-Debug "Outlook not available, trying Send-Mailmessage"
+        if (Send-Mail -eq 0 ) {
+            Write-Debug "Mail send succesfully"
+            $sent = $true
+        }
+        else {
+            Write-Debug "Cant send Mail"
+        }
+        break
+    }
+    -1 {
+        Write-Debug "Unknown Error, cant send Mail"
+        break
+    }
+    Default {}
+}
+
+
+
+if(!$sent) {
+    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
+    pause
+}
