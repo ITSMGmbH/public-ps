@@ -459,11 +459,11 @@ AppendReport -content $generalSummery
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
 {
-    Get-Process -IncludeUserName 
+    Get-Process -IncludeUserName | Format-Table
 }
 else
 {
-    Get-Process
+    Get-Process | Format-Table
 }
 
 Write-Host "`nServices" -BackgroundColor Cyan -ForegroundColor black 
@@ -534,7 +534,7 @@ $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 foreach ($eventlogFile in $eventlogFiles) {
     Write-Debug $eventlogFile.LogFileName
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName)$DiagLogFileSuffix.evtx"
-    $eventlogFile.BackupEventlog($path)
+    $eventlogFile.BackupEventlog($path) | Out-Null
 }
 
 
