@@ -1,5 +1,8 @@
+param (
+    [switch]$simulateTimeProblem
+)
 #########
-# Autor: (c) Marco.Hahnen@ITSM.de
+# Autor: (c) Marco.Hahnen@ITSM.de, Marc.Nonn@itsm.de
 # Zweck: Collect Support Infos
 # Version: 1.0
 # Read: https://docs.itsm.de/display/~hahnenmarco/Get+ITSM+Support+Info
@@ -24,8 +27,6 @@ $logLevel = 2
 # Error 	    2
 # Critical 	    1
 # LogAlways 	0
-
-$simulateTimeProblem= $true
 
 $showDebug
 if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
