@@ -12,7 +12,7 @@
 ########## 
 Clear-Host
 
-$DebugPreference = "Continue" # Stop, Inquire, Continue, SilentlyContinue
+$DebugPreference = "SilentlyContinue" # Stop, Inquire, Continue, SilentlyContinue
 
 $timeDifferencethreshold = 2 # Minutes
 
@@ -331,36 +331,34 @@ route print
 Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
 $NetIPConfiguration = Get-NetIPConfiguration | Where-Object { $_.InterfaceDescription -notlike "*Hyper-V*" }
 
-if(!$skipConnectivityTests) {
+$dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
+foreach ($dnsserver in $dnsservers) {
 
-    $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
-    foreach ($dnsserver in $dnsservers) {
+    $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
     
-        $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
-        
-        Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
-        if($showDebug) {
-            Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
-        }
+    Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
+    if($showDebug) {
+        Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
     }
-    
-    $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
-    foreach($Gateway in $Gateways)
-    {
-        $connectivitySummerys += (Get-Connectivity -Target $Gateway -Note "Gateway")
-    }
-    
-    $connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
-    $connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
-    $connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
-    $connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
-    $connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
-    
-    AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
-    AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
-    AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
-    AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
 }
+
+$Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
+foreach($Gateway in $Gateways)
+{
+    $connectivitySummerys += (Get-Connectivity -Target $Gateway -Note "Gateway")
+}
+
+$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
+$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
+$connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
+$connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
+$connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
+
+AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
+AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
+AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
+AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
+
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
 ((Invoke-WebRequest -UseBasicParsing 'https://api.myip.com/').content | ConvertFrom-Json).ip
