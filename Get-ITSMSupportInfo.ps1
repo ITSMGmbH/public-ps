@@ -403,7 +403,7 @@ $timeDifference = [math]::Abs( ( ($networktime) - ($localtime) ).TotalMinutes)
 
 
 if( $timeDifference -gt $timeDifferencethreshold) {
-    AppendReport -content "Time Difference $timeDifference Minutes"
+    AppendReport -content "Time Difference $timeDifference Minutes" -raw
 }
 
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
