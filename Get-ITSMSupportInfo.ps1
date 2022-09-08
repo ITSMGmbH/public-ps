@@ -1,5 +1,6 @@
 param (
     [switch]$simulateTimeProblem,
+    [switch]$simulateDomainTrustProblem,
     [switch]$simulateUptimeWarning
 )
 #########
@@ -339,6 +340,11 @@ function Check-KnownProblems {
 
     }
 
+    if(!(Check-DomainTrust)) {
+        $anyProblems = $true
+        $problemList.Add("Domain trustrelationship failed. Try Test-ComputerSecureChannel -Repair") | Out-Null
+    }
+
 
 
 
@@ -403,6 +409,14 @@ function Check-Uptime {
         return [math]::Round($uptime, 2)
     }else {
         return 0
+    }
+}
+
+function Check-DomainTrust {
+    if($simulateDomainTrustProblem) {
+        return $false
+    }else {
+        return (Test-ComputerSecureChannel)
     }
 }
 
