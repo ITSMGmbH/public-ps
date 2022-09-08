@@ -25,6 +25,8 @@ $logLevel = 2
 # Critical 	    1
 # LogAlways 	0
 
+$simulateTimeProblem= $true
+
 $showDebug
 if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
     $showDebug = $true
@@ -255,7 +257,7 @@ function Send-OutlookMail {
         $Mail = $Outlook.CreateItem(0)
         $Mail.subject=$subject
         $Mail.To = $to
-        $Mail.Body = $body 
+        $Mail.HTMLBody = $body 
         $Mail.Attachments.Add($attachments)
         $Mail.send()
     }
@@ -295,6 +297,70 @@ function Send-Mail {
 
     return $returncode   
     
+}
+
+function HtmlBulletPoints {
+    param (
+        $items
+    )
+
+    if($null -ne $items) {
+        $html = "<ul>"
+        foreach ($item in $items) {
+            $html += "<li>$item</li>"
+        }
+        $html += "</ul>"
+    
+        return $html
+    }else {
+        return ""
+    }
+
+}
+
+function Check-KnownProblems {
+    $mailBody = HtmlHeading -text "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)"
+    $problemReport = HtmlHeading -text "Problems detected"
+    $problemList = New-Object -TypeName 'System.Collections.ArrayList'
+    $anyProblems = $false
+    AppendReport -content (HtmlHeading -text "Problems detected") -raw
+
+    $timeDifference = Check-TimeDifference
+    if($timeDifference -ne 0) {
+        $anyProblems = $true
+        $msg= "Time Difference $timeDifference Minutes"
+        AppendReport -content $msg -raw
+        $problemList.Add($msg) | Out-Null
+
+    }
+
+
+    $problemReport+= HtmlBulletPoints -items $problemList
+
+    if($anyProblems) {
+        $mailBody += $problemReport
+        return $mailBody
+    }else {
+        return $mailBody
+    }
+}
+
+function Check-TimeDifference {
+
+    $networktimeInfo = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
+    $networktime = Get-Date  $networktimeInfo.datetime 
+    if($simulateTimeProblem) {
+        $localtime = (Get-Date).AddMinutes(15)
+    }else {
+        $localtime = Get-Date
+    }
+    $timeDifference = [math]::Abs( ( ($networktime) - ($localtime) ).TotalMinutes)
+    
+    if( $timeDifference -gt $timeDifferencethreshold) {
+        return $timeDifference
+    }else {
+        return 0
+    }
 }
 
 Write-Host "Please Wait..."
@@ -425,17 +491,7 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
 AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible
 
-AppendReport -content (HtmlHeading -text "Problems detected") -raw
-
-$networktimeInfo = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
-$networktime = Get-Date  $networktimeInfo.datetime 
-$localtime = Get-Date
-$timeDifference = [math]::Abs( ( ($networktime) - ($localtime) ).TotalMinutes)
-
-
-if( $timeDifference -gt $timeDifferencethreshold) {
-    AppendReport -content "Time Difference $timeDifference Minutes" -raw
-}
+$body = Check-KnownProblems
 
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
 
@@ -446,7 +502,7 @@ Stop-Transcript
 Compress-Archive $DiagLogFolder -DestinationPath ("$DiagLogFolder\archive.zip") -Force
 
 $sent = $false
-switch ( (Send-OutlookMail) ) {
+switch ( (Send-OutlookMail -body $body) ) {
     0 {
         Write-Debug "Mail send succesfully"
         $sent = $true
