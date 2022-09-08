@@ -454,14 +454,7 @@ switch ( (Send-OutlookMail) ) {
         $sent = $true
     }
     "80040154" {
-        Write-Debug "Outlook not available, trying Send-Mailmessage"
-        if (Send-Mail -eq 0 ) {
-            Write-Debug "Mail send succesfully"
-            $sent = $true
-        }
-        else {
-            Write-Debug "Cant send Mail"
-        }
+        Write-Debug "Outlook not available, cant send Mail"
         break
     }
     -1 {
