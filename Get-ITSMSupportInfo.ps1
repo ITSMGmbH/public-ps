@@ -428,7 +428,7 @@ Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black
 route print
 
 Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
-$NetIPConfiguration = Get-NetIPConfiguration
+$NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -ne "Disconnected"}
 
 $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
 foreach ($dnsserver in $dnsservers) {
@@ -455,6 +455,8 @@ AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
 AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
 AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
 AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
+AppendReport -content (HtmlHeading -text "Disconnected Network Adapters" -size "4") -raw
+AppendReport -content (Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -eq "Disconnected"} | Select-Object InterfaceAlias)
 
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
