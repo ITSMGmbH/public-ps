@@ -329,7 +329,7 @@ Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black
 route print
 
 Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
-$NetIPConfiguration = Get-NetIPConfiguration | Where-Object { $_.InterfaceDescription -notlike "*Hyper-V*" }
+$NetIPConfiguration = Get-NetIPConfiguration
 
 $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
 foreach ($dnsserver in $dnsservers) {
