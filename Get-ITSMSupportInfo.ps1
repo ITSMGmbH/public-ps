@@ -33,7 +33,7 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
 }
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
-$DiagLogFolder = "$env:USERPROFILE\Desktop\ITSM-SupportInfoLog"
+$DiagLogFolder = "$($env:temp)\ITSM-SupportInfoLog"
 $DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
 
 try {
