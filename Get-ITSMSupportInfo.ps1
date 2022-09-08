@@ -382,7 +382,7 @@ function Check-TimeDifference {
     $timeDifference = [math]::Abs( ( ($networktime) - ($localtime) ).TotalMinutes)
     
     if( $timeDifference -gt $timeDifferencethreshold) {
-        return $timeDifference
+        return [math]::Round($timeDifference, 2)
     }else {
         return 0
     }
@@ -399,7 +399,8 @@ function Check-Uptime {
     }
 
     if($lastBootTime.AddDays($uptimeThreshold) -lt $now ) {
-        return [math]::Abs( ( ($now) - ($lastBootTime) ).TotalHours )
+        $uptime = [math]::Abs( ( ($now) - ($lastBootTime) ).TotalHours )
+        return [math]::Round($uptime, 2)
     }else {
         return 0
     }
