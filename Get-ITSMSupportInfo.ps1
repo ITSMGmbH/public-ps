@@ -39,8 +39,10 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
 }
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
+$DiagLogFileSuffix= "-$env:computername-$NowString"
 $DiagLogFolder = "$($env:temp)\ITSM-SupportInfoLog"
-$DiagLogName = "$DiagLogFolder\$env:computername-$NowString.txt"
+$DiagLogName = "$DiagLogFolder\ITSMSupportInfoLog$DiagLogFileSuffix.txt"
+$DiagLogArchive = "$DiagLogFolder\ITSMSupportInfoLog$DiagLogFileSuffix.zip"
 
 try {
     Stop-Transcript
@@ -240,7 +242,7 @@ function Send-OutlookMail {
         $subject="ITSM Support Script",
         $to= "support@itsm.de",
         $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
-        $attachments = "$DiagLogFolder\archive.zip"
+        $attachments = $DiagLogArchive
     )
 
     $returncode = 0
@@ -276,7 +278,7 @@ function Send-Mail {
         $to= "support@itsm.de",
         $from,
         $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
-        $attachments = "$DiagLogFolder\archive.zip"
+        $attachments = $DiagLogArchive
     )
 
     if($null -eq $from) {
@@ -531,7 +533,7 @@ $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 
 foreach ($eventlogFile in $eventlogFiles) {
     Write-Debug $eventlogFile.LogFileName
-    $path= "$DiagLogFolder\$($eventlogFile.LogFileName).evtx"
+    $path= "$DiagLogFolder\$($eventlogFile.LogFileName)$DiagLogFileSuffix.evtx"
     $eventlogFile.BackupEventlog($path)
 }
 
@@ -558,7 +560,7 @@ $htmlEnd | Out-File $htmlFilePath -Append
 
 Stop-Transcript
 
-Compress-Archive $DiagLogFolder -DestinationPath ("$DiagLogFolder\archive.zip") -Force
+Compress-Archive $DiagLogFolder -DestinationPath $DiagLogArchive -Force
 
 $sent = $false
 switch ( (Send-OutlookMail -body $body) ) {
@@ -581,7 +583,7 @@ switch ( (Send-OutlookMail -body $body) ) {
 
 if(!$sent) {
     clear-host
-    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder\archive.zip manually!"
+    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogArchive manually!"
     Invoke-Item $DiagLogFolder
     pause
 }
