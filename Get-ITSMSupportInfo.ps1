@@ -441,8 +441,6 @@ Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -Fore
 
 $htmlEnd | Out-File $htmlFilePath -Append
 
-Start-Process "file:///$htmlFilePath"
-
 Stop-Transcript
 
 Compress-Archive $DiagLogFolder -DestinationPath ("$DiagLogFolder\archive.zip") -Force
@@ -467,6 +465,8 @@ switch ( (Send-OutlookMail) ) {
 
 
 if(!$sent) {
-    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
+    clear-host
+    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder\archive.zip manually!"
+    Invoke-Item $DiagLogFolder
     pause
 }
