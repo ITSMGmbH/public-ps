@@ -1,5 +1,6 @@
 param (
-    [switch]$simulateTimeProblem
+    [switch]$simulateTimeProblem,
+    [switch]$simulateUptimeWarning
 )
 #########
 # Autor: (c) Marco.Hahnen@ITSM.de, Marc.Nonn@itsm.de
@@ -18,6 +19,7 @@ Clear-Host
 $DebugPreference = "SilentlyContinue" # Stop, Inquire, Continue, SilentlyContinue
 
 $timeDifferencethreshold = 2 # Minutes
+$uptimeThreshold = 2 # Days
 
 $logLevel = 2
 
@@ -320,30 +322,52 @@ function HtmlBulletPoints {
 }
 
 function Check-KnownProblems {
+    #setup
     $mailBody = HtmlHeading -text "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)"
     $problemReport = HtmlHeading -text "Problems detected"
+    $warningReport = HtmlHeading -text "Warnings"
     $problemList = New-Object -TypeName 'System.Collections.ArrayList'
+    $warningList = New-Object -TypeName 'System.Collections.ArrayList'
     $anyProblems = $false
-    AppendReport -content (HtmlHeading -text "Problems detected") -raw
+    $anyWarnings = $false
 
+    #problems
     $timeDifference = Check-TimeDifference
     if($timeDifference -ne 0) {
         $anyProblems = $true
-        $msg= "Time Difference $timeDifference Minutes"
-        AppendReport -content $msg -raw
-        $problemList.Add($msg) | Out-Null
+        $problemList.Add("Time Difference $timeDifference Minutes") | Out-Null
 
     }
 
 
-    $problemReport+= HtmlBulletPoints -items $problemList
+
+
+
+    #warnings
+    $uptime = Check-Uptime
+    if($uptime -ne 0) {
+        $anyWarnings = $true
+        $warningList.Add("Uptime is $uptime hours.") | Out-Null
+    }
+
+
+
+    #output
+    $problemReport += HtmlBulletPoints -items $problemList
+    $warningReport += HtmlBulletPoints -items $warningList
+
+    AppendReport -content $problemReport -raw
+    AppendReport -content $warningReport -raw
 
     if($anyProblems) {
         $mailBody += $problemReport
-        return $mailBody
-    }else {
-        return $mailBody
     }
+
+    if($anyWarnings) {
+        $mailBody += $warningReport
+    }
+
+    return $mailBody
 }
 
 function Check-TimeDifference {
@@ -359,6 +383,23 @@ function Check-TimeDifference {
     
     if( $timeDifference -gt $timeDifferencethreshold) {
         return $timeDifference
+    }else {
+        return 0
+    }
+}
+
+function Check-Uptime {
+
+    $lastBootTime = Get-Date (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
+
+    if($simulateUptimeWarning) {
+        $now = (Get-Date).AddDays(30)
+    }else {
+        $now = Get-Date
+    }
+
+    if($lastBootTime.AddDays($uptimeThreshold) -lt $now ) {
+        return [math]::Abs( ( ($now) - ($lastBootTime) ).TotalHours )
     }else {
         return 0
     }
