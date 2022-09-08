@@ -91,9 +91,10 @@ function Get-Connectivity {
         $Target,
         $Type = "icmp",
         $Port,
-        $Note = "n/a"
+        $Note = "n/a",
+        $Source
     )
-    $status = ""
+    $status = "success"
 
     switch ($type) {
         "icmp" { 
@@ -138,6 +139,38 @@ function Get-Connectivity {
 
             break
         }
+        "dns" {
+            Write-Debug "Resolve $Target..."
+            $test = $null
+            try {
+                if($null -eq $Source) {
+                    $test = Resolve-DnsName $Target
+                }else {
+                    $test = Resolve-DnsName $Target -Server $Source
+                }
+                
+            }catch [System.ComponentModel.Win32Exception] {
+                $HREsult= [System.Convert]::ToString( ($_.Exception.hresult), 16 )
+                switch ($HREsult) {
+                    "80004005" {
+                        Write-Debug "DNS not found"
+                        $status = "failed"
+                        break
+                    }
+                    Default {
+                        Write-Debug "DNS Unknown Error"
+                        $status = "failed"
+                        break
+                    }
+                }
+            }catch {
+                Write-Debug "DNS Unknown Error"
+                $status = "failed"
+                break
+            }
+            
+        }
+
         Default {
             throw "Type not specified"
         }
@@ -337,9 +370,7 @@ foreach ($dnsserver in $dnsservers) {
     $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
     
     Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
-    if($showDebug) {
-        Resolve-DnsName -Name vpn.itsm.de -Server $dnsserver 
-    }
+    $connectivitySummerys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
 }
 
 $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
