@@ -439,7 +439,14 @@ function Check-DomainTrust {
     if($simulateDomainTrustProblem) {
         return $false
     }else {
-        return (Test-ComputerSecureChannel)
+        
+        $result = $null
+        try {
+            $result = Test-ComputerSecureChannel
+        }catch [System.InvalidOperationException] {
+            $true
+        }
+        return $result
     }
 }
 
