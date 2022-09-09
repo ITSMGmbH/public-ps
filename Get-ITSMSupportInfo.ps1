@@ -36,6 +36,22 @@ catch [System.Management.Automation.PSInvalidOperationException] {
 
 }
 
+$NowString = get-date -Format "MMddyyyy-HHmmss"
+$DiagLogFileSuffix= "-$env:computername-$NowString"
+$DiagLogFolder = "$($env:temp)\$fileName" 
+$DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
+$DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
+$htmlFolder= "$DiagLogFolder\html"
+
+Remove-Item -Recurse -Path $DiagLogFolder
+if( !(Test-Path $DiagLogFolder) ) {
+    New-Item -ItemType Directory $DiagLogFolder
+}
+
+if( !(Test-Path $htmlFolder) ) {
+    New-Item -ItemType Directory $htmlFolder
+}
+
 Start-Transcript -Path $DiagLogName
 
 
@@ -48,11 +64,7 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
     $showDebug = $false
 }
 
-$NowString = get-date -Format "MMddyyyy-HHmmss"
-$DiagLogFileSuffix= "-$env:computername-$NowString"
-$DiagLogFolder = "$($env:temp)\$fileName" 
-$DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
-$DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
+
 
 $css = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
 $js = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
@@ -73,8 +85,6 @@ $js
 </body>
 </html>"
 
-$htmlFolder= "$DiagLogFolder\html"
-
 $connectivitySummerys= @()
 
 $generalSummery = New-Object -TypeName psobject 
@@ -84,14 +94,6 @@ Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name Uptime -V
 Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name lastBootTime -Value $null
 #Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name loggedOnUsers -Value $null
 
-Remove-Item -Recurse -Path $DiagLogFolder
-if( !(Test-Path $DiagLogFolder) ) {
-    New-Item -ItemType Directory $DiagLogFolder
-}
-
-if( !(Test-Path $htmlFolder) ) {
-    New-Item -ItemType Directory $htmlFolder
-}
 
 $htmlFilePath = "$htmlFolder\report.html"
 $htmlHead | Out-File -LiteralPath $htmlFilePath -Force
