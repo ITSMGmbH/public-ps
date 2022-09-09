@@ -78,10 +78,6 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
 }
 
 
-while ($mailTo.ToCharArray() -notcontains "@" -or $mailTo.ToCharArray() -notcontains ".") {
-    Write-Host "Invalid Mail!" -BackgroundColor Red -ForegroundColor Black
-    $mailTo = Read-Host -Prompt "Enter Mail To"
-}
 
 $css = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
 $js = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
