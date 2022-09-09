@@ -85,14 +85,14 @@ $js
 </body>
 </html>"
 
-$connectivitySummerys= @()
+$connectivitySummarys= @()
 
-$generalSummery = New-Object -TypeName psobject 
-Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name hostname -Value $null
-Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name isAdmin -Value $null
-Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name Uptime -Value $null
-Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name lastBootTime -Value $null
-#Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name loggedOnUsers -Value $null
+$generalSummary = New-Object -TypeName psobject 
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name hostname -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name isAdmin -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name Uptime -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name lastBootTime -Value $null
+#Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name loggedOnUsers -Value $null
 
 
 $htmlFilePath = "$htmlFolder\report.html"
@@ -190,15 +190,15 @@ function Get-Connectivity {
     
     Write-Host $test | Format-List
 
-    $connectivitySummery = New-Object -TypeName psobject 
+    $connectivitySummary = New-Object -TypeName psobject 
 
-    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Target -Value $Target
-    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Type -Value $Type
-    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Status -Value $status
-    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Note -Value $Note
+    Add-Member -InputObject $connectivitySummary -MemberType NoteProperty -Name Target -Value $Target
+    Add-Member -InputObject $connectivitySummary -MemberType NoteProperty -Name Type -Value $Type
+    Add-Member -InputObject $connectivitySummary -MemberType NoteProperty -Name Status -Value $status
+    Add-Member -InputObject $connectivitySummary -MemberType NoteProperty -Name Note -Value $Note
 
 
-    return $connectivitySummery
+    return $connectivitySummary
 }
 function Test-Administrator  
 {  
@@ -432,12 +432,12 @@ Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black
 if(Test-Administrator)
 {
     Write-Debug "User is admin"
-    $generalSummery.isAdmin = $true
+    $generalSummary.isAdmin = $true
 }
 else
 {
     Write-Debug "User is not admin"
-    $generalSummery.isAdmin = $false
+    $generalSummary.isAdmin = $false
 }
 
 Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
@@ -448,9 +448,9 @@ $systeminfo = Get-ComputerInfo
 $uptime = $systeminfo.OsUptime.toString()
 $utHours = $uptime.Split('.')[0]
 $utMinutes = $uptime.Split('.')[1].Split(':')[0]
-$generalSummery.Uptime = "$utHours h, $utMinutes min"
-$generalSummery.lastBootTime = $systeminfo.OsLastBootUpTime
-$generalSummery.hostname = $systeminfo.CsCaption
+$generalSummary.Uptime = "$utHours h, $utMinutes min"
+$generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
+$generalSummary.hostname = $systeminfo.CsCaption
 
 
 
@@ -458,7 +458,7 @@ Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black
 quser
 
 AppendReport -content (HtmlHeading -text "General info") -raw
-AppendReport -content $generalSummery
+AppendReport -content $generalSummary
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
@@ -496,28 +496,28 @@ $NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Statu
 $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
 foreach ($dnsserver in $dnsservers) {
 
-    $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
+    $connectivitySummarys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
     
     Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
-    $connectivitySummerys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
+    $connectivitySummarys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
 }
 
 $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
 foreach($Gateway in $Gateways)
 {
-    $connectivitySummerys += (Get-Connectivity -Target $Gateway -Note "Gateway")
+    $connectivitySummarys += (Get-Connectivity -Target $Gateway -Note "Gateway")
 }
 
-$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
 
 AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
-AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
+AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "success"})
 AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
-AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
+AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "failed"})
 AppendReport -content (HtmlHeading -text "Disconnected Network Adapters" -size "4") -raw
 AppendReport -content (Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -eq "Disconnected"} | Select-Object InterfaceAlias)
 
