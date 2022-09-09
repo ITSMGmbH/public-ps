@@ -15,6 +15,7 @@ param (
     [switch]$simulateDomainTrustProblem,
     [switch]$simulateUptimeWarning
 )
+
 #########
 # Autor: (c) Marco.Hahnen@ITSM.de, Marc.Nonn@itsm.de
 # Zweck: Collect Support Infos
@@ -43,7 +44,10 @@ $DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
 $DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
 $htmlFolder= "$DiagLogFolder\html"
 
-Remove-Item -Recurse -Path $DiagLogFolder
+if(Test-Path $DiagLogFolder) {
+    Remove-Item -Recurse -Path $DiagLogFolder
+}
+
 if( !(Test-Path $DiagLogFolder) ) {
     New-Item -ItemType Directory $DiagLogFolder
 }
@@ -56,6 +60,15 @@ Start-Transcript -Path $DiagLogName
 
 
 $DebugPreference = $debug
+
+Write-Debug "mailTo: $mailTo"
+Write-Debug "timeDifferencethreshold: $timeDifferencethreshold"
+Write-Debug "debug: $debug"
+Write-Debug "fileName: $fileName"
+Write-Debug "logLevel: $logLevel"
+Write-Debug "simulateTimeProblem:  $simulateTimeProblem"
+Write-Debug "simulateDomainTrustProblem: $simulateDomainTrustProblem"
+Write-Debug "simulateUptimeWarning: $simulateUptimeWarning"
 
 $showDebug
 if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
