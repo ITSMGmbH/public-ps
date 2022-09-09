@@ -1,4 +1,16 @@
 param (
+    $mailTo,
+    $timeDifferencethreshold = 2, # minutes
+    $uptimeThreshold = 2, # days
+    $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
+    $fileName= "SupportLog",
+    $logLevel = 2,
+    # Verbose 	    5
+    # Informational 4
+    # Warning 	    3
+    # Error 	    2
+    # Critical 	    1
+    # LogAlways 	0
     [switch]$simulateTimeProblem,
     [switch]$simulateDomainTrustProblem,
     [switch]$simulateUptimeWarning
@@ -17,19 +29,8 @@ param (
 ########## 
 Clear-Host
 
-$DebugPreference = "SilentlyContinue" # Stop, Inquire, Continue, SilentlyContinue
 
-$timeDifferencethreshold = 2 # Minutes
-$uptimeThreshold = 2 # Days
-
-$logLevel = 2
-
-# Verbose 	    5
-# Informational 4
-# Warning 	    3
-# Error 	    2
-# Critical 	    1
-# LogAlways 	0
+$DebugPreference = $debug
 
 $showDebug
 if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
@@ -40,9 +41,9 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFileSuffix= "-$env:computername-$NowString"
-$DiagLogFolder = "$($env:temp)\ITSM-SupportInfoLog"
-$DiagLogName = "$DiagLogFolder\ITSMSupportInfoLog$DiagLogFileSuffix.txt"
-$DiagLogArchive = "$DiagLogFolder\ITSMSupportInfoLog$DiagLogFileSuffix.zip"
+$DiagLogFolder = "$($env:temp)\$fileName" 
+$DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
+$DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
 
 try {
     Stop-Transcript
