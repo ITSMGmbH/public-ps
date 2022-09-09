@@ -1,8 +1,21 @@
 param (
+    $mailTo,
+    $timeDifferencethreshold = 2, # minutes
+    $uptimeThreshold = 2, # days
+    $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
+    $fileName= "SupportLog",
+    $logLevel = 2,
+    # Verbose 	    5
+    # Informational 4
+    # Warning 	    3
+    # Error 	    2
+    # Critical 	    1
+    # LogAlways 	0
     [switch]$simulateTimeProblem,
     [switch]$simulateDomainTrustProblem,
     [switch]$simulateUptimeWarning
 )
+
 #########
 # Autor: (c) Marco.Hahnen@ITSM.de, Marc.Nonn@itsm.de
 # Zweck: Collect Support Infos
@@ -17,19 +30,45 @@ param (
 ########## 
 Clear-Host
 
-$DebugPreference = "SilentlyContinue" # Stop, Inquire, Continue, SilentlyContinue
+try {
+    Stop-Transcript
+}
+catch [System.Management.Automation.PSInvalidOperationException] {
 
-$timeDifferencethreshold = 2 # Minutes
-$uptimeThreshold = 2 # Days
+}
 
-$logLevel = 2
+$NowString = get-date -Format "MMddyyyy-HHmmss"
+$DiagLogFileSuffix= "-$env:computername-$NowString"
+$DiagLogFolder = "$($env:temp)\$fileName" 
+$DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
+$DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
+$htmlFolder= "$DiagLogFolder\html"
 
-# Verbose 	    5
-# Informational 4
-# Warning 	    3
-# Error 	    2
-# Critical 	    1
-# LogAlways 	0
+if(Test-Path $DiagLogFolder) {
+    Remove-Item -Recurse -Path $DiagLogFolder
+}
+
+if( !(Test-Path $DiagLogFolder) ) {
+    New-Item -ItemType Directory $DiagLogFolder
+}
+
+if( !(Test-Path $htmlFolder) ) {
+    New-Item -ItemType Directory $htmlFolder
+}
+
+Start-Transcript -Path $DiagLogName
+
+
+$DebugPreference = $debug
+
+Write-Debug "mailTo: $mailTo"
+Write-Debug "timeDifferencethreshold: $timeDifferencethreshold"
+Write-Debug "debug: $debug"
+Write-Debug "fileName: $fileName"
+Write-Debug "logLevel: $logLevel"
+Write-Debug "simulateTimeProblem:  $simulateTimeProblem"
+Write-Debug "simulateDomainTrustProblem: $simulateDomainTrustProblem"
+Write-Debug "simulateUptimeWarning: $simulateUptimeWarning"
 
 $showDebug
 if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
@@ -38,20 +77,7 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
     $showDebug = $false
 }
 
-$NowString = get-date -Format "MMddyyyy-HHmmss"
-$DiagLogFileSuffix= "-$env:computername-$NowString"
-$DiagLogFolder = "$($env:temp)\ITSM-SupportInfoLog"
-$DiagLogName = "$DiagLogFolder\ITSMSupportInfoLog$DiagLogFileSuffix.txt"
-$DiagLogArchive = "$DiagLogFolder\ITSMSupportInfoLog$DiagLogFileSuffix.zip"
 
-try {
-    Stop-Transcript
-}
-catch [System.Management.Automation.PSInvalidOperationException] {
-
-}
-
-Start-Transcript -Path $DiagLogName
 
 $css = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
 $js = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
@@ -72,25 +98,15 @@ $js
 </body>
 </html>"
 
-$htmlFolder= "$DiagLogFolder\html"
+$connectivitySummarys= @()
 
-$connectivitySummerys= @()
+$generalSummary = New-Object -TypeName psobject 
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name hostname -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name isAdmin -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name Uptime -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name lastBootTime -Value $null
+#Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name loggedOnUsers -Value $null
 
-$generalSummery = New-Object -TypeName psobject 
-Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name hostname -Value $null
-Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name isAdmin -Value $null
-Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name Uptime -Value $null
-Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name lastBootTime -Value $null
-#Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name loggedOnUsers -Value $null
-
-Remove-Item -Recurse -Path $DiagLogFolder
-if( !(Test-Path $DiagLogFolder) ) {
-    New-Item -ItemType Directory $DiagLogFolder
-}
-
-if( !(Test-Path $htmlFolder) ) {
-    New-Item -ItemType Directory $htmlFolder
-}
 
 $htmlFilePath = "$htmlFolder\report.html"
 $htmlHead | Out-File -LiteralPath $htmlFilePath -Force
@@ -187,15 +203,15 @@ function Get-Connectivity {
     
     Write-Host $test | Format-List
 
-    $connectivitySummery = New-Object -TypeName psobject 
+    $connectivitySummary = New-Object -TypeName psobject 
 
-    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Target -Value $Target
-    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Type -Value $Type
-    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Status -Value $status
-    Add-Member -InputObject $connectivitySummery -MemberType NoteProperty -Name Note -Value $Note
+    Add-Member -InputObject $connectivitySummary -MemberType NoteProperty -Name Target -Value $Target
+    Add-Member -InputObject $connectivitySummary -MemberType NoteProperty -Name Type -Value $Type
+    Add-Member -InputObject $connectivitySummary -MemberType NoteProperty -Name Status -Value $status
+    Add-Member -InputObject $connectivitySummary -MemberType NoteProperty -Name Note -Value $Note
 
 
-    return $connectivitySummery
+    return $connectivitySummary
 }
 function Test-Administrator  
 {  
@@ -241,7 +257,7 @@ function AppendReport {
 function Send-OutlookMail {
     param (
         $subject="ITSM Support Script",
-        $to= "support@itsm.de",
+        $to,
         $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
         $attachments = $DiagLogArchive
     )
@@ -266,7 +282,17 @@ function Send-OutlookMail {
         $Mail.To = $to
         $Mail.HTMLBody = $body 
         $Mail.Attachments.Add($attachments)
-        $Mail.send()
+
+        try {
+            $Mail.send()
+        }catch [System.Runtime.InteropServices.COMException] {
+            $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
+            $returncode = $HREsult
+            $failed = $true
+        }catch {
+            $returncode = -1
+            $failed = $true
+        }        
     }
 
     return $returncode
@@ -419,7 +445,14 @@ function Check-DomainTrust {
     if($simulateDomainTrustProblem) {
         return $false
     }else {
-        return (Test-ComputerSecureChannel)
+        
+        $result = $null
+        try {
+            $result = Test-ComputerSecureChannel
+        }catch [System.InvalidOperationException] {
+            $true
+        }
+        return $result
     }
 }
 
@@ -429,12 +462,12 @@ Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black
 if(Test-Administrator)
 {
     Write-Debug "User is admin"
-    $generalSummery.isAdmin = $true
+    $generalSummary.isAdmin = $true
 }
 else
 {
     Write-Debug "User is not admin"
-    $generalSummery.isAdmin = $false
+    $generalSummary.isAdmin = $false
 }
 
 Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
@@ -445,9 +478,9 @@ $systeminfo = Get-ComputerInfo
 $uptime = $systeminfo.OsUptime.toString()
 $utHours = $uptime.Split('.')[0]
 $utMinutes = $uptime.Split('.')[1].Split(':')[0]
-$generalSummery.Uptime = "$utHours h, $utMinutes min"
-$generalSummery.lastBootTime = $systeminfo.OsLastBootUpTime
-$generalSummery.hostname = $systeminfo.CsCaption
+$generalSummary.Uptime = "$utHours h, $utMinutes min"
+$generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
+$generalSummary.hostname = $systeminfo.CsCaption
 
 
 
@@ -455,7 +488,7 @@ Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black
 quser
 
 AppendReport -content (HtmlHeading -text "General info") -raw
-AppendReport -content $generalSummery
+AppendReport -content $generalSummary
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
@@ -493,28 +526,28 @@ $NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Statu
 $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
 foreach ($dnsserver in $dnsservers) {
 
-    $connectivitySummerys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
+    $connectivitySummarys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
     
     Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
-    $connectivitySummerys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
+    $connectivitySummarys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
 }
 
 $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
 foreach($Gateway in $Gateways)
 {
-    $connectivitySummerys += (Get-Connectivity -Target $Gateway -Note "Gateway")
+    $connectivitySummarys += (Get-Connectivity -Target $Gateway -Note "Gateway")
 }
 
-$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
-$connectivitySummerys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
+$connectivitySummarys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
 
 AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
-AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "success"})
+AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "success"})
 AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
-AppendReport -content ($connectivitySummerys | Where-Object {$_.Status -eq "failed"})
+AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "failed"})
 AppendReport -content (HtmlHeading -text "Disconnected Network Adapters" -size "4") -raw
 AppendReport -content (Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -eq "Disconnected"} | Select-Object InterfaceAlias)
 
@@ -571,6 +604,10 @@ switch ( (Send-OutlookMail -body $body) ) {
     }
     "80040154" {
         Write-Debug "Outlook not available, cant send Mail"
+        break
+    }
+    "80004005" {
+        Write-Debug "No MailTo provided, cant send Mail"
         break
     }
     -1 {
