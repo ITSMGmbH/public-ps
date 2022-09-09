@@ -83,6 +83,7 @@ Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name Uptime -V
 Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name lastBootTime -Value $null
 #Add-Member -InputObject $generalSummery -MemberType NoteProperty -Name loggedOnUsers -Value $null
 
+Remove-Item -Recurse -Path $DiagLogFolder
 if( !(Test-Path $DiagLogFolder) ) {
     New-Item -ItemType Directory $DiagLogFolder
 }
