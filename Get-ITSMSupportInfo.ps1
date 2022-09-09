@@ -257,7 +257,7 @@ function AppendReport {
 function Send-OutlookMail {
     param (
         $subject="ITSM Support Script",
-        $to= "support@itsm.de",
+        $to,
         $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
         $attachments = $DiagLogArchive
     )
@@ -282,7 +282,17 @@ function Send-OutlookMail {
         $Mail.To = $to
         $Mail.HTMLBody = $body 
         $Mail.Attachments.Add($attachments)
-        $Mail.send()
+
+        try {
+            $Mail.send()
+        }catch [System.Runtime.InteropServices.COMException] {
+            $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
+            $returncode = $HREsult
+            $failed = $true
+        }catch {
+            $returncode = -1
+            $failed = $true
+        }        
     }
 
     return $returncode
@@ -594,6 +604,10 @@ switch ( (Send-OutlookMail -body $body) ) {
     }
     "80040154" {
         Write-Debug "Outlook not available, cant send Mail"
+        break
+    }
+    "80004005" {
+        Write-Debug "No MailTo provided, cant send Mail"
         break
     }
     -1 {
