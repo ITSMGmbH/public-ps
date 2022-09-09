@@ -29,6 +29,15 @@ param (
 ########## 
 Clear-Host
 
+try {
+    Stop-Transcript
+}
+catch [System.Management.Automation.PSInvalidOperationException] {
+
+}
+
+Start-Transcript -Path $DiagLogName
+
 
 $DebugPreference = $debug
 
@@ -44,15 +53,6 @@ $DiagLogFileSuffix= "-$env:computername-$NowString"
 $DiagLogFolder = "$($env:temp)\$fileName" 
 $DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
 $DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
-
-try {
-    Stop-Transcript
-}
-catch [System.Management.Automation.PSInvalidOperationException] {
-
-}
-
-Start-Transcript -Path $DiagLogName
 
 $css = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.css").content
 $js = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/ITSMGmbH/public-ps/main/Get-ITSMSupportInfo.js").content
