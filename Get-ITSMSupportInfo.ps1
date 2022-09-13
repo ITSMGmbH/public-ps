@@ -597,7 +597,7 @@ Stop-Transcript
 Compress-Archive $DiagLogFolder -DestinationPath $DiagLogArchive -Force
 
 $sent = $false
-switch ( (Send-OutlookMail -body $body) ) {
+switch ( (Send-OutlookMail -body $body -to $mailTo) ) {
     0 {
         Write-Debug "Mail send succesfully"
         $sent = $true
