@@ -484,6 +484,10 @@ function Copy-ForticlientLogs {
     # }   
 }
 
+function Copy-ForticlientConfig {
+    reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg"
+}
+
 Write-Host "Please Wait..."
 
 Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black 
@@ -613,6 +617,7 @@ AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDispl
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
+Copy-ForticlientConfig
 
 $body = Check-KnownProblems
 
