@@ -201,7 +201,7 @@ function Get-Connectivity {
         }
     }
     
-    Write-Host $test | Format-List
+    $test | Format-List | Out-Host
 
     $connectivitySummary = New-Object -TypeName psobject 
 
@@ -388,6 +388,16 @@ function Check-KnownProblems {
 
 
     #output
+    if($problemList.Count -gt 0 ) {
+        Write-Debug "Problems detected:"
+        $problemList | Format-List | Out-Host
+    }
+
+    if($warningList.Count -gt 0 ) {
+        Write-Debug "Warnings:"
+        $warningList | Format-List | Out-Host
+    }
+    
     $problemReport += HtmlBulletPoints -items $problemList
     $warningReport += HtmlBulletPoints -items $warningList
 
@@ -594,6 +604,7 @@ $htmlEnd | Out-File $htmlFilePath -Append
 
 Stop-Transcript
 
+Clear-Host
 Compress-Archive $DiagLogFolder -DestinationPath $DiagLogArchive -Force
 
 $sent = $false
@@ -620,8 +631,7 @@ switch ( (Send-OutlookMail -body $body -to $mailTo) ) {
 
 
 if(!$sent) {
-    clear-host
-    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogArchive manually!"
+    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
     Invoke-Item $DiagLogFolder
     pause
 }
