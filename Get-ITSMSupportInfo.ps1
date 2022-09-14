@@ -43,6 +43,9 @@ $DiagLogFolder = "$($env:temp)\$fileName"
 $DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
 $DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
 $htmlFolder= "$DiagLogFolder\html"
+$DiagLogFortiClientFolder = "$DiagLogFolder\FortiClientLog"
+
+$forticlientLogPath = "$($env:ProgramFiles)\Fortinet\FortiClient\logs\trace"
 
 if(Test-Path $DiagLogFolder) {
     Remove-Item -Recurse -Path $DiagLogFolder
@@ -57,7 +60,6 @@ if( !(Test-Path $htmlFolder) ) {
 }
 
 Start-Transcript -Path $DiagLogName
-
 
 $DebugPreference = $debug
 
@@ -466,6 +468,22 @@ function Check-DomainTrust {
     }
 }
 
+function Copy-ForticlientLogs {
+
+    if(! (Test-Path $DiagLogFortiClientFolder) ) {
+        New-Item -ItemType Directory -Path $DiagLogFortiClientFolder
+    }
+
+    $forticlientLogFile = Get-Content "$forticlientLogPath\sslvpndaemon_1.log" -Tail 10000
+    $forticlientLogFile | Out-File "$DiagLogFortiClientFolder\sslvpndaemon_1.log"
+
+
+    # $forticlientLogFiles= Get-ChildItem $forticlientLogPath -Filter "sslvpndaemon_*.log"
+    # foreach ($forticlientLogFile in $forticlientLogFiles) {
+    #     $forticlientLogFile | Copy-Item -Destination "$DiagLogFortiClientFolder\$forticlientLogFile"
+    # }   
+}
+
 Write-Host "Please Wait..."
 
 Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black 
@@ -581,9 +599,6 @@ foreach ($eventlogFile in $eventlogFiles) {
     $eventlogFile.BackupEventlog($path) | Out-Null
 }
 
-
-
-
 $eventLogs = Get-WinEvent -ListLog * -EA silentlycontinue
 $recentEventLogs = $eventLogs | where-object { $_.recordcount -AND $_.lastwritetime -gt ( (get-date).AddHours(-5) ) }
 $recentEvents = ( $recentEventLogs | foreach-object {
@@ -595,6 +610,9 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
 AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible
+
+Write-Debug "Copying Forticlient Logs"
+Copy-ForticlientLogs
 
 $body = Check-KnownProblems
 
