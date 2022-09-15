@@ -11,6 +11,13 @@ param (
     # Error 	    2
     # Critical 	    1
     # LogAlways 	0
+    $smtpUser,
+    $smtpPW,
+    $smtpServer,
+    $smtpPort,
+    $smtpTo,
+    $smtpSubject = "Support Script",
+    $smtpFrom,
     [switch]$simulateTimeProblem,
     [switch]$simulateDomainTrustProblem,
     [switch]$simulateUptimeWarning
@@ -36,6 +43,8 @@ try {
 catch [System.Management.Automation.PSInvalidOperationException] {
 
 }
+
+$smtpPorts = 25, 587, 465, 2525
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFileSuffix= "-$env:computername-$NowString"
@@ -77,6 +86,10 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
     $showDebug = $true
 }else {
     $showDebug = $false
+}
+
+if($null -ne $smtpPort) {
+    $smtpPorts = $smtpPort
 }
 
 
@@ -303,25 +316,23 @@ function Send-OutlookMail {
 
 function Send-Mail {
     param (
-        $subject="ITSM Support Script",
-        $to= "support@itsm.de",
+        $subject,
+        $to,
         $from,
+        $port,
+        $server,
         $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
-        $attachments = $DiagLogArchive
+        $attachments = $DiagLogArchive,
+        $mailCred
     )
 
-    if($null -eq $from) {
-        $from = Read-Host -Prompt "Enter From Address"
+    if($null -eq $from -or $null -eq $to -or $null -eq $port -or $null -eq $server) {
+        return 1
     }
 
-    $domain = $from.split('@')[1]
-    $smtpServer = Resolve-DnsName -Type MX -Name $domain
-
-    $mailCred = Get-Credential -Message "Enter Mail Credentials" -UserName $from
-    
     $returncode = 0
     try {
-        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer ($smtpServer.ip4address) -Attachments $attachments -UseSsl -Credential $mailCred
+        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred
     }catch [System.Net.Mail.SmtpException] {
         $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
         $returncode = $HREsult
@@ -649,6 +660,25 @@ switch ( (Send-OutlookMail -body $body -to $mailTo) ) {
         break
     }
     Default {}
+}
+
+if(!$sent) {
+    $cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $smtpUser, (ConvertTo-SecureString -AsPlainText -Force -String $smtpPW)
+    
+
+    switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred) ) {
+        0 {
+            Write-Debug "Mail send succesfully"
+            $sent = $true
+        }
+        1 {
+            Write-Debug "Missing Mail Paramater"
+        }
+        -1 {
+            Write-Debug "Unknown Error"
+        }
+        Default {}
+    }
 }
 
 
