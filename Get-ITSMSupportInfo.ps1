@@ -11,6 +11,13 @@ param (
     # Error 	    2
     # Critical 	    1
     # LogAlways 	0
+    $smtpUser,
+    $smtpPW,
+    $smtpServer,
+    $smtpPort,
+    $smtpTo,
+    $smtpSubject = "Support Script",
+    $smtpFrom,
     [switch]$simulateTimeProblem,
     [switch]$simulateDomainTrustProblem,
     [switch]$simulateUptimeWarning
@@ -37,12 +44,17 @@ catch [System.Management.Automation.PSInvalidOperationException] {
 
 }
 
+$smtpPorts = 25, 587, 465, 2525
+
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFileSuffix= "-$env:computername-$NowString"
 $DiagLogFolder = "$($env:temp)\$fileName" 
 $DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
 $DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
 $htmlFolder= "$DiagLogFolder\html"
+$DiagLogFortiClientFolder = "$DiagLogFolder\FortiClientLog"
+
+$forticlientLogPath = "$($env:ProgramFiles)\Fortinet\FortiClient\logs\trace"
 
 if(Test-Path $DiagLogFolder) {
     Remove-Item -Recurse -Path $DiagLogFolder
@@ -58,14 +70,20 @@ if( !(Test-Path $htmlFolder) ) {
 
 Start-Transcript -Path $DiagLogName
 
-
 $DebugPreference = $debug
 
 Write-Debug "mailTo: $mailTo"
 Write-Debug "timeDifferencethreshold: $timeDifferencethreshold"
+Write-Debug "uptimeThreshold: $uptimeThreshold"
 Write-Debug "debug: $debug"
 Write-Debug "fileName: $fileName"
 Write-Debug "logLevel: $logLevel"
+Write-Debug "smtpUser: $smtpUser"
+Write-Debug "smtpServer: $smtpServer"
+Write-Debug "smtpPort: $smtpPort"
+Write-Debug "smtpTo: $smtpTo"
+Write-Debug "smtpSubject: $smtpSubject"
+Write-Debug "smtpFrom: $smtpFrom"
 Write-Debug "simulateTimeProblem:  $simulateTimeProblem"
 Write-Debug "simulateDomainTrustProblem: $simulateDomainTrustProblem"
 Write-Debug "simulateUptimeWarning: $simulateUptimeWarning"
@@ -75,6 +93,10 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
     $showDebug = $true
 }else {
     $showDebug = $false
+}
+
+if($null -ne $smtpPort) {
+    $smtpPorts = $smtpPort
 }
 
 
@@ -201,7 +223,7 @@ function Get-Connectivity {
         }
     }
     
-    Write-Host $test | Format-List
+    $test | Format-List | Out-Host
 
     $connectivitySummary = New-Object -TypeName psobject 
 
@@ -301,25 +323,48 @@ function Send-OutlookMail {
 
 function Send-Mail {
     param (
-        $subject="ITSM Support Script",
-        $to= "support@itsm.de",
+        $subject,
+        $to,
         $from,
+        $port,
+        $server,
         $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
-        $attachments = $DiagLogArchive
+        $attachments = $DiagLogArchive,
+        $mailCred
     )
 
-    if($null -eq $from) {
-        $from = Read-Host -Prompt "Enter From Address"
+    $portOpen = $false
+
+    if($null -eq $from -or $null -eq $to -or $null -eq $port -or $null -eq $server) {
+        return 1
+    }
+    
+    if($port.Count -eq 1) {
+        if( (Test-NetConnection $server -Port $port).TcpTestSucceeded ) { 
+            $portOpen = $true 
+        }else {
+            $port = $smtpPorts
+        }
+    } 
+    
+    if(!$portOpen) {
+        foreach ($p in $port) {
+            if( (Test-NetConnection $server -Port $p).TcpTestSucceeded ) {
+                $port = $p
+                $portOpen = $true
+                break
+            }
+        }
     }
 
-    $domain = $from.split('@')[1]
-    $smtpServer = Resolve-DnsName -Type MX -Name $domain
+    if(!$portOpen) {
+        Write-Debug "No SMTP Port Open"
+        return 2
+    }
 
-    $mailCred = Get-Credential -Message "Enter Mail Credentials" -UserName $from
-    
     $returncode = 0
     try {
-        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer ($smtpServer.ip4address) -Attachments $attachments -UseSsl -Credential $mailCred
+        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred
     }catch [System.Net.Mail.SmtpException] {
         $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
         $returncode = $HREsult
@@ -388,6 +433,16 @@ function Check-KnownProblems {
 
 
     #output
+    if($problemList.Count -gt 0 ) {
+        Write-Debug "Problems detected:"
+        $problemList | Format-List | Out-Host
+    }
+
+    if($warningList.Count -gt 0 ) {
+        Write-Debug "Warnings:"
+        $warningList | Format-List | Out-Host
+    }
+    
     $problemReport += HtmlBulletPoints -items $problemList
     $warningReport += HtmlBulletPoints -items $warningList
 
@@ -456,6 +511,37 @@ function Check-DomainTrust {
     }
 }
 
+function Copy-ForticlientLogs {
+
+    if( !(Test-Path $forticlientLogPath) ) {
+        Write-Debug "No Forticlient Logs available"
+        return 0
+    }
+
+    if(! (Test-Path $DiagLogFortiClientFolder) ) {
+        New-Item -ItemType Directory -Path $DiagLogFortiClientFolder
+    }
+
+    $forticlientLogFile = Get-Content "$forticlientLogPath\sslvpndaemon_1.log" -Tail 10000
+    $forticlientLogFile | Out-File "$DiagLogFortiClientFolder\sslvpndaemon_1.log"
+
+
+    # $forticlientLogFiles= Get-ChildItem $forticlientLogPath -Filter "sslvpndaemon_*.log"
+    # foreach ($forticlientLogFile in $forticlientLogFiles) {
+    #     $forticlientLogFile | Copy-Item -Destination "$DiagLogFortiClientFolder\$forticlientLogFile"
+    # }   
+}
+
+function Copy-ForticlientConfig {
+    try {
+        reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg"
+    }catch {
+        Write-Debug "Forticlient Reg Export failed"
+        return 1
+    }
+    
+}
+
 Write-Host "Please Wait..."
 
 Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black 
@@ -474,6 +560,7 @@ Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black
 Write-Debug systeminfo
 
 $systeminfo = Get-ComputerInfo
+$systeminfo | Format-List
 
 $uptime = $systeminfo.OsUptime.toString()
 $utHours = $uptime.Split('.')[0]
@@ -571,9 +658,6 @@ foreach ($eventlogFile in $eventlogFiles) {
     $eventlogFile.BackupEventlog($path) | Out-Null
 }
 
-
-
-
 $eventLogs = Get-WinEvent -ListLog * -EA silentlycontinue
 $recentEventLogs = $eventLogs | where-object { $_.recordcount -AND $_.lastwritetime -gt ( (get-date).AddHours(-5) ) }
 $recentEvents = ( $recentEventLogs | foreach-object {
@@ -585,6 +669,10 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
 AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible
+
+Write-Debug "Copying Forticlient Logs"
+Copy-ForticlientLogs
+Copy-ForticlientConfig
 
 $body = Check-KnownProblems
 
@@ -617,11 +705,32 @@ switch ( (Send-OutlookMail -body $body -to $mailTo) ) {
     Default {}
 }
 
+if(!$sent) {
+    $cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $smtpUser, (ConvertTo-SecureString -AsPlainText -Force -String $smtpPW)
+    
+
+    switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred) ) {
+        0 {
+            Write-Debug "Mail send succesfully"
+            $sent = $true
+        }
+        1 {
+            Write-Debug "Missing Mail Paramater"
+        }
+        2 {
+            Write-Debug "SMTP Connection failed"
+        }
+        -1 {
+            Write-Debug "Unknown Error"
+        }
+        Default {}
+    }
+}
+
 
 
 if(!$sent) {
-    clear-host
-    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogArchive manually!"
+    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
     Invoke-Item $DiagLogFolder
     pause
 }
