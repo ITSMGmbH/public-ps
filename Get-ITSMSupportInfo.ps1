@@ -560,6 +560,7 @@ Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black
 Write-Debug systeminfo
 
 $systeminfo = Get-ComputerInfo
+$systeminfo | Format-List
 
 $uptime = $systeminfo.OsUptime.toString()
 $utHours = $uptime.Split('.')[0]
