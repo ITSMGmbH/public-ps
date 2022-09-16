@@ -333,18 +333,23 @@ function Send-Mail {
         $mailCred
     )
 
+    $portOpen = $false
+
     if($null -eq $from -or $null -eq $to -or $null -eq $port -or $null -eq $server) {
         return 1
     }
-
+    
     if($port.Count -eq 1) {
-        if( ! (Test-NetConnection $server -Port $port).TcpTestSucceeded ) {
-            $port = $smtpPorts   
+        if( (Test-NetConnection $server -Port $port).TcpTestSucceeded ) { 
+            $portOpen = $true 
+        }else {
+            $port = $smtpPorts
         }
-    }else {
-        $portOpen = $false
+    } 
+    
+    if(!$portOpen) {
         foreach ($p in $port) {
-            if( (Test-NetConnection $server -Port $p) ) {
+            if( (Test-NetConnection $server -Port $p).TcpTestSucceeded ) {
                 $port = $p
                 $portOpen = $true
                 break
