@@ -339,12 +339,13 @@ function Send-Mail {
 
     if($port.Count -eq 1) {
         if( ! (Test-NetConnection $server -Port $port).TcpTestSucceeded ) {
-            $port = $smtpPorts   
+            $port = $smtpPorts  
+            $portOpen = $true 
         }
     }else {
         $portOpen = $false
         foreach ($p in $port) {
-            if( (Test-NetConnection $server -Port $p) ) {
+            if( (Test-NetConnection $server -Port $p).TcpTestSucceeded ) {
                 $port = $p
                 $portOpen = $true
                 break
