@@ -337,6 +337,26 @@ function Send-Mail {
         return 1
     }
 
+    if($port.Count -eq 1) {
+        if( ! (Test-NetConnection $server -Port $port).TcpTestSucceeded ) {
+            $port = $smtpPorts   
+        }
+    }else {
+        $portOpen = $false
+        foreach ($p in $port) {
+            if( (Test-NetConnection $server -Port $p) ) {
+                $port = $p
+                $portOpen = $true
+                break
+            }
+        }
+    }
+
+    if(!$portOpen) {
+        Write-Debug "No SMTP Port Open"
+        return 2
+    }
+
     $returncode = 0
     try {
         Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred
@@ -690,6 +710,9 @@ if(!$sent) {
         }
         1 {
             Write-Debug "Missing Mail Paramater"
+        }
+        2 {
+            Write-Debug "SMTP Connection failed"
         }
         -1 {
             Write-Debug "Unknown Error"
