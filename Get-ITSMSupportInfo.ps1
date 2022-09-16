@@ -481,6 +481,11 @@ function Check-DomainTrust {
 
 function Copy-ForticlientLogs {
 
+    if( !(Test-Path $forticlientLogPath) ) {
+        Write-Debug "No Forticlient Logs available"
+        return 0
+    }
+
     if(! (Test-Path $DiagLogFortiClientFolder) ) {
         New-Item -ItemType Directory -Path $DiagLogFortiClientFolder
     }
@@ -496,7 +501,13 @@ function Copy-ForticlientLogs {
 }
 
 function Copy-ForticlientConfig {
-    reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg"
+    try {
+        reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg"
+    }catch {
+        Write-Debug "Forticlient Reg Export failed"
+        return 1
+    }
+    
 }
 
 Write-Host "Please Wait..."
@@ -638,7 +649,6 @@ $htmlEnd | Out-File $htmlFilePath -Append
 
 Stop-Transcript
 
-Clear-Host
 Compress-Archive $DiagLogFolder -DestinationPath $DiagLogArchive -Force
 
 $sent = $false
