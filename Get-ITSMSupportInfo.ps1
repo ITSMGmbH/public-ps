@@ -568,11 +568,11 @@ function Copy-ForticlientLogs {
 }
 
 function Copy-ForticlientConfig {
-    try {
+
+    if( (Test-Path "HKLM:\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels") ) {
         reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg"
-    }catch {
-        Write-Debug "Forticlient Reg Export failed"
-        return 1
+    }else {
+        Write-Debug "No Forticlient Config available"
     }
     
 }
