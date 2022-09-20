@@ -438,7 +438,7 @@ function Check-KnownProblems {
         $anyWarnings = $true
         $warningList.Add("Low Disk Space")  | Out-Null
         foreach ($lowDrive in $lowDrives) {
-            $str = "Drive: $($lowDrive.Name), Used: $($lowDrive.Used/1GB), Free: $($lowDrive.Free/1GB)"
+            $str = "Drive: $($lowDrive.Name), Used: $([math]::Round( ($lowDrive.Used/1GB), 2) ), Free: $([math]::Round( ($lowDrive.Free/1GB), 2) )"
             $warningList.Add($str) | Out-Null
         }
     }
@@ -478,7 +478,7 @@ function Check-TimeDifference {
     $worldTimeRequest = $null
     $timeApiRequest = $null
     $networktime = $null
-    
+
     try {
         $worldTimeRequest = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
     }catch {
@@ -608,7 +608,15 @@ quser
 
 AppendReport -content (HtmlHeading -text "General info") -raw
 AppendReport -content $generalSummary
-AppendReport -content ( (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem"} )
+AppendReport -content (
+    (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem"} | Select-Object Name, @{
+        Name="Used (GB)";Expression={ [math]::Round( ($_.Used / 1GB), 2 ) }
+    }, @{
+        Name="Free (GB)";Expression={ [math]::Round( ($_.Free / 1GB), 2 ) }
+    }
+    
+)
+
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
