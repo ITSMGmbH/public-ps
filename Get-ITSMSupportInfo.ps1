@@ -12,6 +12,11 @@ param (
     # Error 	    2
     # Critical 	    1
     # LogAlways 	0
+    $centerDeviceLogLevel = "WARN",
+    # DEBUG
+    # INFO
+    # WARN
+    # ERROR
     $smtpUser,
     $smtpPW,
     $smtpServer,
@@ -55,8 +60,10 @@ $DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
 $DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
 $htmlFolder= "$DiagLogFolder\html"
 $DiagLogFortiClientFolder = "$DiagLogFolder\FortiClientLog"
+$DiagLogCenterdeviceFolder = "$DiagLogFolder\CenterdeviceLog"
 
 $forticlientLogPath = "$($env:ProgramFiles)\Fortinet\FortiClient\logs\trace"
+$centerDeviceLogPath = "$($env:USERPROFILE)\AppData\Local\CenterDevice\log\client.log"
 
 if(Test-Path $DiagLogFolder) {
     Remove-Item -Recurse -Path $DiagLogFolder
@@ -99,6 +106,29 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
 
 if($null -ne $smtpPort) {
     $smtpPorts = $smtpPort
+}
+
+
+$centerDeviceLogKeywords=$null
+switch ($centerDeviceLogLevel) {
+    "DEBUG" { 
+        $centerDeviceLogKeywords= "DEBUG", "INFO" ,"WARN", "ERROR"
+        break
+    }
+    "INFO" {
+        $centerDeviceLogKeywords= "INFO" ,"WARN", "ERROR"
+        break
+    }
+    "WARN" {
+        $centerDeviceLogKeywords= "WARN", "ERROR"
+        break
+    }
+    "ERROR" {
+        $centerDeviceLogKeywords= "ERROR"
+    }
+    Default {
+        $centerDeviceLogKeywords = "WARN", "ERROR"
+    }
 }
 
 
@@ -446,6 +476,18 @@ function Check-KnownProblems {
         }
     }
 
+    $cdLines = Check-CenterdeviceLogs
+
+    if($cdLines.Count -le 10 -and $cdLines.Count -gt 0) {
+        $anyWarnings = $true
+        $warningList.Add("Centerdevice Errors") | Out-Null
+        foreach($line in $cdLines) {
+            $warningList.Add($line) | Out-Null
+        }
+    }elseif ($cdLines.Count -gt 10) {
+        $anyWarnings = $true
+        $warningList.Add("$($cdLines.Count) Centerdevice Errors! See $DiagLogCenterdeviceFolder for details") | Out-Null
+    }
 
 
     #output
@@ -574,7 +616,33 @@ function Copy-ForticlientConfig {
     }else {
         Write-Debug "No Forticlient Config available"
     }
+
+}
+
+function Copy-CenterdeviceLogs {
+    if(! (Test-Path $centerDeviceLogPath) ) {
+        Write-Debug "No Centerdevice Logs available"
+        return 0
+    }
+
+    if(! (Test-Path $DiagLogCenterdeviceFolder)) {
+        New-Item -ItemType Directory -Path $DiagLogCenterdeviceFolder
+    }
+
+    Copy-Item -Path $centerDeviceLogPath -Destination "$DiagLogCenterdeviceFolder\client.log"
+
+}
+
+function Check-CenterdeviceLogs {
+
+    if(! (Test-Path $centerDeviceLogPath) ) {
+        Write-Debug "No Centerdevice Logs available"
+        return 0
+    }
+
+    $log = Get-Content $centerDeviceLogPath
     
+    return $log | Select-String $centerDeviceLogKeywords
 }
 
 Write-Host "Please Wait..."
@@ -721,6 +789,9 @@ AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDispl
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
 Copy-ForticlientConfig
+
+Write-Debug "Copying Centerdevice Logs"
+Copy-CenterdeviceLogs
 
 $body = Check-KnownProblems
 
