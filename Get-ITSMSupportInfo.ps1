@@ -2,6 +2,7 @@ param (
     $mailTo,
     $timeDifferencethreshold = 2, # minutes
     $uptimeThreshold = 2, # days
+    $diskSizeThreshold = 20, # GB
     $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
     $fileName= "SupportLog",
     $logLevel = 2,
@@ -18,6 +19,7 @@ param (
     $smtpTo,
     $smtpSubject = "Support Script",
     $smtpFrom,
+    [switch]$skipConnectivity,
     [switch]$simulateTimeProblem,
     [switch]$simulateDomainTrustProblem,
     [switch]$simulateUptimeWarning
@@ -268,6 +270,7 @@ function AppendReport {
         $content | Out-File $htmlFilePath -Append
     }else {
         $content | ConvertTo-Html -Fragment | Out-File $htmlFilePath -Append
+        $content | Format-List | Out-Host
     }
 
     if($collapsible) {
@@ -430,6 +433,16 @@ function Check-KnownProblems {
         $warningList.Add("Uptime is $uptime hours.") | Out-Null
     }
 
+    $lowDrives = Check-FreeDiskSpace
+    if($null -ne $lowDrives) {
+        $anyWarnings = $true
+        $warningList.Add("Low Disk Space")  | Out-Null
+        foreach ($lowDrive in $lowDrives) {
+            $str = "Drive: $($lowDrive.Name), Used: $($lowDrive.Used/1GB), Free: $($lowDrive.Free/1GB)"
+            $warningList.Add($str) | Out-Null
+        }
+    }
+
 
 
     #output
@@ -446,8 +459,8 @@ function Check-KnownProblems {
     $problemReport += HtmlBulletPoints -items $problemList
     $warningReport += HtmlBulletPoints -items $warningList
 
-    AppendReport -content $problemReport -raw
-    AppendReport -content $warningReport -raw
+    AppendReport -content $problemReport -raw | Out-Null
+    AppendReport -content $warningReport -raw | Out-Null
 
     if($anyProblems) {
         $mailBody += $problemReport
@@ -509,6 +522,10 @@ function Check-DomainTrust {
         }
         return $result
     }
+}
+
+function Check-FreeDiskSpace {
+    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.Free/1GB -lt $diskSizeThreshold}
 }
 
 function Copy-ForticlientLogs {
@@ -576,6 +593,7 @@ quser
 
 AppendReport -content (HtmlHeading -text "General info") -raw
 AppendReport -content $generalSummary
+AppendReport -content ( (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem"} )
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
@@ -607,36 +625,39 @@ ipconfig /all
 Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black 
 route print
 
-Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
-$NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -ne "Disconnected"}
-
-$dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
-foreach ($dnsserver in $dnsservers) {
-
-    $connectivitySummarys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
+if(!$skipConnectivity) {
+    Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
+    $NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -ne "Disconnected"}
     
-    Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
-    $connectivitySummarys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
+    $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
+    foreach ($dnsserver in $dnsservers) {
+    
+        $connectivitySummarys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
+        
+        Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
+        $connectivitySummarys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
+    }
+    
+    $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
+    foreach($Gateway in $Gateways)
+    {
+        $connectivitySummarys += (Get-Connectivity -Target $Gateway -Note "Gateway")
+    }
+    
+    $connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
+    $connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
+    $connectivitySummarys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
+    $connectivitySummarys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
+    $connectivitySummarys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
+    
+    AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
+    AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "success"})
+    AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
+    AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "failed"})
+    AppendReport -content (HtmlHeading -text "Disconnected Network Adapters" -size "4") -raw
+    AppendReport -content (Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -eq "Disconnected"} | Select-Object InterfaceAlias)
 }
 
-$Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
-foreach($Gateway in $Gateways)
-{
-    $connectivitySummarys += (Get-Connectivity -Target $Gateway -Note "Gateway")
-}
-
-$connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
-$connectivitySummarys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummarys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
-$connectivitySummarys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
-
-AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
-AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "success"})
-AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
-AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "failed"})
-AppendReport -content (HtmlHeading -text "Disconnected Network Adapters" -size "4") -raw
-AppendReport -content (Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -eq "Disconnected"} | Select-Object InterfaceAlias)
 
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
