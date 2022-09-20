@@ -475,8 +475,23 @@ function Check-KnownProblems {
 
 function Check-TimeDifference {
 
-    $networktimeInfo = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
-    $networktime = Get-Date  $networktimeInfo.datetime 
+    $worldTimeRequest = $null
+    $timeApiRequest = $null
+    $networktime = $null
+    
+    try {
+        $worldTimeRequest = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
+    }catch {
+        $timeApiRequest = ( ( (Invoke-WebRequest -UseBasicParsing "https://www.timeapi.io/api/Time/current/zone?timeZone=Europe/Amsterdam").content) | ConvertFrom-Json)
+    }
+
+
+    if($null -eq $worldTimeRequest) {
+        $networktime = Get-Date $timeApiRequest.datetime
+    }else {
+        $networktime = Get-Date  $worldTimeRequest.datetime 
+    }
+    
     if($simulateTimeProblem) {
         $localtime = (Get-Date).AddMinutes(15)
     }else {
