@@ -257,7 +257,8 @@ function AppendReport {
         $content,
         [switch]$raw,
         [switch]$collapsible,
-        $collapsibleTitle = "Expand"
+        $collapsibleTitle = "Expand",
+        [switch]$noConsoleOut
     )
 
     if($collapsible) {
@@ -270,7 +271,9 @@ function AppendReport {
         $content | Out-File $htmlFilePath -Append
     }else {
         $content | ConvertTo-Html -Fragment | Out-File $htmlFilePath -Append
-        $content | Format-List | Out-Host
+        if(!$noConsoleOut) {
+            $content | Format-List | Out-Host
+        }
     }
 
     if($collapsible) {
@@ -696,6 +699,7 @@ $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Comma
 
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 
+Write-Debug "Getting Eventlogs:"
 foreach ($eventlogFile in $eventlogFiles) {
     Write-Debug $eventlogFile.LogFileName
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName)$DiagLogFileSuffix.evtx"
@@ -712,7 +716,7 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 })
 
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
-AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible
+AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible -noConsoleOut
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
