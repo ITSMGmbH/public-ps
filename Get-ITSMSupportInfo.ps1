@@ -2,6 +2,7 @@ param (
     $mailTo,
     $timeDifferencethreshold = 2, # minutes
     $uptimeThreshold = 2, # days
+    $diskSizeThreshold = 20, # GB
     $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
     $fileName= "SupportLog",
     $logLevel = 2,
@@ -11,6 +12,11 @@ param (
     # Error 	    2
     # Critical 	    1
     # LogAlways 	0
+    $centerDeviceLogLevel = "WARN",
+    # DEBUG
+    # INFO
+    # WARN
+    # ERROR
     $smtpUser,
     $smtpPW,
     $smtpServer,
@@ -18,6 +24,7 @@ param (
     $smtpTo,
     $smtpSubject = "Support Script",
     $smtpFrom,
+    [switch]$skipConnectivity,
     [switch]$simulateTimeProblem,
     [switch]$simulateDomainTrustProblem,
     [switch]$simulateUptimeWarning
@@ -53,8 +60,10 @@ $DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
 $DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
 $htmlFolder= "$DiagLogFolder\html"
 $DiagLogFortiClientFolder = "$DiagLogFolder\FortiClientLog"
+$DiagLogCenterdeviceFolder = "$DiagLogFolder\CenterdeviceLog"
 
 $forticlientLogPath = "$($env:ProgramFiles)\Fortinet\FortiClient\logs\trace"
+$centerDeviceLogPath = "$($env:USERPROFILE)\AppData\Local\CenterDevice\log\client.log"
 
 if(Test-Path $DiagLogFolder) {
     Remove-Item -Recurse -Path $DiagLogFolder
@@ -97,6 +106,29 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
 
 if($null -ne $smtpPort) {
     $smtpPorts = $smtpPort
+}
+
+
+$centerDeviceLogKeywords=$null
+switch ($centerDeviceLogLevel) {
+    "DEBUG" { 
+        $centerDeviceLogKeywords= "DEBUG", "INFO" ,"WARN", "ERROR"
+        break
+    }
+    "INFO" {
+        $centerDeviceLogKeywords= "INFO" ,"WARN", "ERROR"
+        break
+    }
+    "WARN" {
+        $centerDeviceLogKeywords= "WARN", "ERROR"
+        break
+    }
+    "ERROR" {
+        $centerDeviceLogKeywords= "ERROR"
+    }
+    Default {
+        $centerDeviceLogKeywords = "WARN", "ERROR"
+    }
 }
 
 
@@ -255,7 +287,8 @@ function AppendReport {
         $content,
         [switch]$raw,
         [switch]$collapsible,
-        $collapsibleTitle = "Expand"
+        $collapsibleTitle = "Expand",
+        [switch]$noConsoleOut
     )
 
     if($collapsible) {
@@ -268,6 +301,9 @@ function AppendReport {
         $content | Out-File $htmlFilePath -Append
     }else {
         $content | ConvertTo-Html -Fragment | Out-File $htmlFilePath -Append
+        if(!$noConsoleOut) {
+            $content | Format-List | Out-Host
+        }
     }
 
     if($collapsible) {
@@ -430,6 +466,28 @@ function Check-KnownProblems {
         $warningList.Add("Uptime is $uptime hours.") | Out-Null
     }
 
+    $lowDrives = Check-FreeDiskSpace
+    if($null -ne $lowDrives) {
+        $anyWarnings = $true
+        $warningList.Add("Low Disk Space")  | Out-Null
+        foreach ($lowDrive in $lowDrives) {
+            $str = "Drive: $($lowDrive.Name), Used: $([math]::Round( ($lowDrive.Used/1GB), 2) ), Free: $([math]::Round( ($lowDrive.Free/1GB), 2) )"
+            $warningList.Add($str) | Out-Null
+        }
+    }
+
+    $cdLines = Check-CenterdeviceLogs
+
+    if($cdLines.Count -le 10 -and $cdLines.Count -gt 0) {
+        $anyWarnings = $true
+        $warningList.Add("Centerdevice Errors") | Out-Null
+        foreach($line in $cdLines) {
+            $warningList.Add($line) | Out-Null
+        }
+    }elseif ($cdLines.Count -gt 10) {
+        $anyWarnings = $true
+        $warningList.Add("$($cdLines.Count) Centerdevice Errors! See $DiagLogCenterdeviceFolder for details") | Out-Null
+    }
 
 
     #output
@@ -446,8 +504,8 @@ function Check-KnownProblems {
     $problemReport += HtmlBulletPoints -items $problemList
     $warningReport += HtmlBulletPoints -items $warningList
 
-    AppendReport -content $problemReport -raw
-    AppendReport -content $warningReport -raw
+    AppendReport -content $problemReport -raw | Out-Null
+    AppendReport -content $warningReport -raw | Out-Null
 
     if($anyProblems) {
         $mailBody += $problemReport
@@ -462,8 +520,23 @@ function Check-KnownProblems {
 
 function Check-TimeDifference {
 
-    $networktimeInfo = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
-    $networktime = Get-Date  $networktimeInfo.datetime 
+    $worldTimeRequest = $null
+    $timeApiRequest = $null
+    $networktime = $null
+
+    try {
+        $worldTimeRequest = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
+    }catch {
+        $timeApiRequest = ( ( (Invoke-WebRequest -UseBasicParsing "https://www.timeapi.io/api/Time/current/zone?timeZone=Europe/Amsterdam").content) | ConvertFrom-Json)
+    }
+
+
+    if($null -eq $worldTimeRequest) {
+        $networktime = Get-Date $timeApiRequest.datetime
+    }else {
+        $networktime = Get-Date  $worldTimeRequest.datetime 
+    }
+    
     if($simulateTimeProblem) {
         $localtime = (Get-Date).AddMinutes(15)
     }else {
@@ -511,6 +584,10 @@ function Check-DomainTrust {
     }
 }
 
+function Check-FreeDiskSpace {
+    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.Free/1GB -lt $diskSizeThreshold}
+}
+
 function Copy-ForticlientLogs {
 
     if( !(Test-Path $forticlientLogPath) ) {
@@ -533,13 +610,39 @@ function Copy-ForticlientLogs {
 }
 
 function Copy-ForticlientConfig {
-    try {
+
+    if( (Test-Path "HKLM:\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels") ) {
         reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg"
-    }catch {
-        Write-Debug "Forticlient Reg Export failed"
-        return 1
+    }else {
+        Write-Debug "No Forticlient Config available"
     }
+
+}
+
+function Copy-CenterdeviceLogs {
+    if(! (Test-Path $centerDeviceLogPath) ) {
+        Write-Debug "No Centerdevice Logs available"
+        return 0
+    }
+
+    if(! (Test-Path $DiagLogCenterdeviceFolder)) {
+        New-Item -ItemType Directory -Path $DiagLogCenterdeviceFolder
+    }
+
+    Copy-Item -Path $centerDeviceLogPath -Destination "$DiagLogCenterdeviceFolder\client.log"
+
+}
+
+function Check-CenterdeviceLogs {
+
+    if(! (Test-Path $centerDeviceLogPath) ) {
+        Write-Debug "No Centerdevice Logs available"
+        return 0
+    }
+
+    $log = Get-Content $centerDeviceLogPath
     
+    return $log | Select-String $centerDeviceLogKeywords
 }
 
 Write-Host "Please Wait..."
@@ -576,6 +679,15 @@ quser
 
 AppendReport -content (HtmlHeading -text "General info") -raw
 AppendReport -content $generalSummary
+AppendReport -content (
+    (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem"} | Select-Object Name, @{
+        Name="Used (GB)";Expression={ [math]::Round( ($_.Used / 1GB), 2 ) }
+    }, @{
+        Name="Free (GB)";Expression={ [math]::Round( ($_.Free / 1GB), 2 ) }
+    }
+    
+)
+
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
@@ -607,36 +719,39 @@ ipconfig /all
 Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black 
 route print
 
-Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
-$NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -ne "Disconnected"}
-
-$dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
-foreach ($dnsserver in $dnsservers) {
-
-    $connectivitySummarys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
+if(!$skipConnectivity) {
+    Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
+    $NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -ne "Disconnected"}
     
-    Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
-    $connectivitySummarys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
+    $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
+    foreach ($dnsserver in $dnsservers) {
+    
+        $connectivitySummarys += (Get-Connectivity -Target $dnsserver -Note "Local Resolver")
+        
+        Write-Debug "Test DNS Server $dnsserver resolve vpn.itsm.de"
+        $connectivitySummarys += (Get-Connectivity -Target "vpn.itsm.de" -Type "dns" -Note "@$dnsserver" -Source $dnsserver)
+    }
+    
+    $Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
+    foreach($Gateway in $Gateways)
+    {
+        $connectivitySummarys += (Get-Connectivity -Target $Gateway -Note "Gateway")
+    }
+    
+    $connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
+    $connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
+    $connectivitySummarys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
+    $connectivitySummarys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
+    $connectivitySummarys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
+    
+    AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
+    AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "success"})
+    AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
+    AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "failed"})
+    AppendReport -content (HtmlHeading -text "Disconnected Network Adapters" -size "4") -raw
+    AppendReport -content (Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -eq "Disconnected"} | Select-Object InterfaceAlias)
 }
 
-$Gateways = ($NetIPConfiguration | select -ExpandProperty IPV4DefaultGateway).NextHop
-foreach($Gateway in $Gateways)
-{
-    $connectivitySummarys += (Get-Connectivity -Target $Gateway -Note "Gateway")
-}
-
-$connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummarys += (Get-Connectivity -Target vpn.itsm.de -type traceroute -Note "General Connectivity")
-$connectivitySummarys += (Get-Connectivity -Target google.de -type tcp -Port 443 -Note "General Connectivity")
-$connectivitySummarys += (Get-Connectivity -Target google.de -type traceroute -Note "General Connectivity")
-$connectivitySummarys += (Get-Connectivity -Target 8.8.8.8 -type traceroute -Note "General Connectivity")
-
-AppendReport -content (HtmlHeading -text "Successfull Connectivity")  -raw
-AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "success"})
-AppendReport -content (HtmlHeading -text "Failed Connectivity")  -raw
-AppendReport -content ($connectivitySummarys | Where-Object {$_.Status -eq "failed"})
-AppendReport -content (HtmlHeading -text "Disconnected Network Adapters" -size "4") -raw
-AppendReport -content (Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -eq "Disconnected"} | Select-Object InterfaceAlias)
 
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
@@ -652,6 +767,7 @@ $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Comma
 
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 
+Write-Debug "Getting Eventlogs:"
 foreach ($eventlogFile in $eventlogFiles) {
     Write-Debug $eventlogFile.LogFileName
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName)$DiagLogFileSuffix.evtx"
@@ -668,7 +784,7 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 })
 
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
-AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible
+AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible -noConsoleOut
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
