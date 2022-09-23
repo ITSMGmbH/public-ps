@@ -672,7 +672,7 @@ AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDispl
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
-Copy-ForticlientConfig
+#Copy-ForticlientConfig
 
 $body = Check-KnownProblems
 
