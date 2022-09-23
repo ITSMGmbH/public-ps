@@ -790,9 +790,6 @@ Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
 #Copy-ForticlientConfig
 
-Write-Debug "Copying Centerdevice Logs"
-Copy-CenterdeviceLogs
-
 $body = Check-KnownProblems
 
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
