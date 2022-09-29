@@ -3,6 +3,7 @@ param (
     $timeDifferencethreshold = 2, # minutes
     $uptimeThreshold = 2, # days
     $diskSizeThreshold = 20, # GB
+    $freeMemoryThreshold = 15, # %
     $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
     $fileName= "SupportLog",
     $logLevel = 2,
@@ -489,6 +490,12 @@ function Check-KnownProblems {
         $warningList.Add("$($cdLines.Count) Centerdevice Errors! See $DiagLogCenterdeviceFolder for details") | Out-Null
     }
 
+    $freeMemPercent = Check-FreeMemory
+    if($freeMemPercent -lt $freeMemoryThreshold) {
+        $anyWarnings = $true
+        $warningList.Add("Low Memory. $freeMemPercent%") | Out-Null
+    }
+
 
     #output
     if($problemList.Count -gt 0 ) {
@@ -643,6 +650,13 @@ function Check-CenterdeviceLogs {
     $log = Get-Content $centerDeviceLogPath
     
     return $log | Select-String $centerDeviceLogKeywords
+}
+
+function Check-FreeMemory {
+    $totalRam = (Get-CIMInstance Win32_OperatingSystem | Select TotalVisibleMemorySize).TotalVisibleMemorySize / 1MB
+    $freeRAM = (Get-CIMInstance Win32_OperatingSystem | Select FreePhysicalMemory).FreePhysicalMemory / 1MB
+    $percent = [Math]::Round(($totalRAM / $freeRAM), 2) * 10
+    return $percent
 }
 
 Write-Host "Please Wait..."
