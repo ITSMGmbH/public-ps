@@ -52,11 +52,13 @@ catch [System.Management.Automation.PSInvalidOperationException] {
 
 }
 
+$tempPath = (Get-Item $env:temp).FullName
+
 $smtpPorts = 25, 587, 465, 2525
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFileSuffix= "-$env:computername-$NowString"
-$DiagLogFolder = "$($env:temp)\$fileName" 
+$DiagLogFolder = "$tempPath\$fileName" 
 $DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
 $DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
 $htmlFolder= "$DiagLogFolder\html"
@@ -776,7 +778,7 @@ Write-Host "`nSpeedTest" -BackgroundColor Cyan -ForegroundColor black
 #100M Testfile
 $size = "100"
 $in = "http://speedtest.frankfurt.linode.com/garbage.php?r=0.29286396544417626&ckSize=" + $size
-$out = $env:temp +"\speedtest.bin"
+$out = $tempPath +"\speedtest.bin"
 $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Command {$wc.Downloadfile($in,$out)}).TotalSeconds)*8); del $out
 
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
