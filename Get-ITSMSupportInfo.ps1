@@ -403,7 +403,7 @@ function Send-Mail {
 
     $returncode = 0
     try {
-        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred
+        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred -BodyAsHtml
     }catch [System.Net.Mail.SmtpException] {
         $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
         $returncode = $HREsult
@@ -481,13 +481,13 @@ function Check-KnownProblems {
 
     $cdLines = Check-CenterdeviceLogs
 
-    if($cdLines.Count -le 10 -and $cdLines.Count -gt 0) {
+    if($cdLines.Count -le 10 -and $cdLines -ne 0) {
         $anyWarnings = $true
         $warningList.Add("Centerdevice Errors") | Out-Null
         foreach($line in $cdLines) {
             $warningList.Add($line) | Out-Null
         }
-    }elseif ($cdLines.Count -gt 10) {
+    }elseif ($cdLines.Count -gt 10 -and $cdLines -ne 0) {
         $anyWarnings = $true
         $warningList.Add("$($cdLines.Count) Centerdevice Errors! See $DiagLogCenterdeviceFolder for details") | Out-Null
     }
@@ -513,14 +513,13 @@ function Check-KnownProblems {
     $problemReport += HtmlBulletPoints -items $problemList
     $warningReport += HtmlBulletPoints -items $warningList
 
-    AppendReport -content $problemReport -raw | Out-Null
-    AppendReport -content $warningReport -raw | Out-Null
-
     if($anyProblems) {
+        AppendReport -content $problemReport -raw | Out-Null
         $mailBody += $problemReport
     }
 
     if($anyWarnings) {
+        AppendReport -content $warningReport -raw | Out-Null
         $mailBody += $warningReport
     }
 
@@ -842,7 +841,7 @@ if(!$sent) {
     $cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $smtpUser, (ConvertTo-SecureString -AsPlainText -Force -String $smtpPW)
     
 
-    switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred) ) {
+    switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred -body $body) ) {
         0 {
             Write-Debug "Mail send succesfully"
             $sent = $true
