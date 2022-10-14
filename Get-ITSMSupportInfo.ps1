@@ -3,6 +3,7 @@ param (
     $timeDifferencethreshold = 2, # minutes
     $uptimeThreshold = 2, # days
     $diskSizeThreshold = 20, # GB
+    $freeMemoryThreshold = 15, # %
     $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
     $fileName= "SupportLog",
     $logLevel = 2,
@@ -51,11 +52,13 @@ catch [System.Management.Automation.PSInvalidOperationException] {
 
 }
 
+$tempPath = (Get-Item $env:temp).FullName
+
 $smtpPorts = 25, 587, 465, 2525
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFileSuffix= "-$env:computername-$NowString"
-$DiagLogFolder = "$($env:temp)\$fileName" 
+$DiagLogFolder = "$tempPath\$fileName" 
 $DiagLogName = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.txt"
 $DiagLogArchive = "$DiagLogFolder\$fileName-$DiagLogFileSuffix.zip"
 $htmlFolder= "$DiagLogFolder\html"
@@ -400,7 +403,7 @@ function Send-Mail {
 
     $returncode = 0
     try {
-        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred
+        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred -BodyAsHtml
     }catch [System.Net.Mail.SmtpException] {
         $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
         $returncode = $HREsult
@@ -478,15 +481,21 @@ function Check-KnownProblems {
 
     $cdLines = Check-CenterdeviceLogs
 
-    if($cdLines.Count -le 10 -and $cdLines.Count -gt 0) {
+    if($cdLines.Count -le 10 -and $cdLines -ne 0) {
         $anyWarnings = $true
         $warningList.Add("Centerdevice Errors") | Out-Null
         foreach($line in $cdLines) {
             $warningList.Add($line) | Out-Null
         }
-    }elseif ($cdLines.Count -gt 10) {
+    }elseif ($cdLines.Count -gt 10 -and $cdLines -ne 0) {
         $anyWarnings = $true
         $warningList.Add("$($cdLines.Count) Centerdevice Errors! See $DiagLogCenterdeviceFolder for details") | Out-Null
+    }
+
+    $freeMemPercent = Check-FreeMemory
+    if($freeMemPercent -lt $freeMemoryThreshold) {
+        $anyWarnings = $true
+        $warningList.Add("Low Memory. $freeMemPercent%") | Out-Null
     }
 
 
@@ -504,14 +513,13 @@ function Check-KnownProblems {
     $problemReport += HtmlBulletPoints -items $problemList
     $warningReport += HtmlBulletPoints -items $warningList
 
-    AppendReport -content $problemReport -raw | Out-Null
-    AppendReport -content $warningReport -raw | Out-Null
-
     if($anyProblems) {
+        AppendReport -content $problemReport -raw | Out-Null
         $mailBody += $problemReport
     }
 
     if($anyWarnings) {
+        AppendReport -content $warningReport -raw | Out-Null
         $mailBody += $warningReport
     }
 
@@ -645,6 +653,13 @@ function Check-CenterdeviceLogs {
     return $log | Select-String $centerDeviceLogKeywords
 }
 
+function Check-FreeMemory {
+    $totalRam = (Get-CIMInstance Win32_OperatingSystem | Select TotalVisibleMemorySize).TotalVisibleMemorySize / 1MB
+    $freeRAM = (Get-CIMInstance Win32_OperatingSystem | Select FreePhysicalMemory).FreePhysicalMemory / 1MB
+    $percent = [Math]::Round(($totalRAM / $freeRAM), 2) * 10
+    return $percent
+}
+
 Write-Host "Please Wait..."
 
 Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black 
@@ -762,7 +777,7 @@ Write-Host "`nSpeedTest" -BackgroundColor Cyan -ForegroundColor black
 #100M Testfile
 $size = "100"
 $in = "http://speedtest.frankfurt.linode.com/garbage.php?r=0.29286396544417626&ckSize=" + $size
-$out = $env:temp +"\speedtest.bin"
+$out = $tempPath +"\speedtest.bin"
 $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Command {$wc.Downloadfile($in,$out)}).TotalSeconds)*8); del $out
 
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
@@ -826,7 +841,7 @@ if(!$sent) {
     $cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $smtpUser, (ConvertTo-SecureString -AsPlainText -Force -String $smtpPW)
     
 
-    switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred) ) {
+    switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred -body $body) ) {
         0 {
             Write-Debug "Mail send succesfully"
             $sent = $true
