@@ -630,7 +630,7 @@ function Copy-ForticlientLogs {
 function Copy-ForticlientConfig {
 
     if( (Test-Path "HKLM:\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels") ) {
-        reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg"
+        reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg.txt"
     }else {
         Write-Debug "No Forticlient Config available"
     }
@@ -811,7 +811,7 @@ AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDispl
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
-#Copy-ForticlientConfig
+Copy-ForticlientConfig
 Copy-CenterdeviceLogs
 
 $body = Check-KnownProblems
