@@ -446,6 +446,37 @@ function Get-Uptime {
     
 }
 
+function Get-ForticlientConfig {
+    $configTemplate = @{
+        Name = $null
+        Address = $null
+        SaveUsername = $null
+    }    
+
+
+    if(Test-Path hklm:\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels) {
+        $key = get-item hklm:\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels
+        $tunnels = $key | Get-ChildItem
+    
+        $configs = @()
+        foreach ($tunnel in $tunnels) {
+            $tunnelProperties = ($tunnel | Get-ItemProperty)
+            $config = [pscustomobject]$configTemplate
+
+            $config.Name = $tunnel.PSChildName
+            $config.Address = $tunnelProperties.Server
+            $config.SaveUsername = [bool]$tunnelProperties.save_username
+            $configs += $config
+        }
+        
+        return $configs
+    }else {
+        Write-Debug "No Forticlient Config found"
+        return $null
+    }
+    
+}
+
 function Check-KnownProblems {
     #setup
     $mailBody = HtmlHeading -text "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)"
@@ -710,6 +741,9 @@ AppendReport -content (
     }
     
 )
+
+AppendReport -content (HtmlHeading -text "Forticlient Configs") -raw
+AppendReport -content (Get-ForticlientConfig)
 
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
