@@ -435,6 +435,17 @@ function HtmlBulletPoints {
 
 }
 
+function Get-Uptime {
+    $lastBootTime = Get-Date (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
+
+    $now = Get-Date
+
+    $uptime = ( ($now) - ($lastBootTime) ).TotalHours
+
+    return [math]::Round($uptime, 2)
+    
+}
+
 function Check-KnownProblems {
     #setup
     $mailBody = HtmlHeading -text "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)"
@@ -561,17 +572,16 @@ function Check-TimeDifference {
 
 function Check-Uptime {
 
-    $lastBootTime = Get-Date (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
-
     if($simulateUptimeWarning) {
         $now = (Get-Date).AddDays(30)
     }else {
         $now = Get-Date
     }
 
+    $uptime = Get-Uptime
+
     if($lastBootTime.AddDays($uptimeThreshold) -lt $now ) {
-        $uptime = [math]::Abs( ( ($now) - ($lastBootTime) ).TotalHours )
-        return [math]::Round($uptime, 2)
+        return $uptime
     }else {
         return 0
     }
@@ -680,10 +690,8 @@ Write-Debug systeminfo
 $systeminfo = Get-ComputerInfo
 $systeminfo | Format-List
 
-$uptime = $systeminfo.OsUptime.toString()
-$utHours = $uptime.Split('.')[0]
-$utMinutes = $uptime.Split('.')[1].Split(':')[0]
-$generalSummary.Uptime = "$utHours h, $utMinutes min"
+$uptime = Get-Uptime
+$generalSummary.Uptime = "$uptime h"
 $generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
 $generalSummary.hostname = $systeminfo.CsCaption
 
