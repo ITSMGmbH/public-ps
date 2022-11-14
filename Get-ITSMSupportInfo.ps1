@@ -435,6 +435,48 @@ function HtmlBulletPoints {
 
 }
 
+function Get-Uptime {
+    $lastBootTime = Get-Date (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
+
+    $now = Get-Date
+
+    $uptime = ( ($now) - ($lastBootTime) ).TotalHours
+
+    return [math]::Round($uptime, 2)
+    
+}
+
+function Get-ForticlientConfig {
+    $configTemplate = @{
+        Name = $null
+        Address = $null
+        SaveUsername = $null
+    }    
+
+
+    if(Test-Path hklm:\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels) {
+        $key = get-item hklm:\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels
+        $tunnels = $key | Get-ChildItem
+    
+        $configs = @()
+        foreach ($tunnel in $tunnels) {
+            $tunnelProperties = ($tunnel | Get-ItemProperty)
+            $config = [pscustomobject]$configTemplate
+
+            $config.Name = $tunnel.PSChildName
+            $config.Address = $tunnelProperties.Server
+            $config.SaveUsername = [bool]$tunnelProperties.save_username
+            $configs += $config
+        }
+        
+        return $configs
+    }else {
+        Write-Debug "No Forticlient Config found"
+        return $null
+    }
+    
+}
+
 function Check-KnownProblems {
     #setup
     $mailBody = HtmlHeading -text "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)"
@@ -561,17 +603,16 @@ function Check-TimeDifference {
 
 function Check-Uptime {
 
-    $lastBootTime = Get-Date (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
-
     if($simulateUptimeWarning) {
         $now = (Get-Date).AddDays(30)
     }else {
         $now = Get-Date
     }
 
+    $uptime = Get-Uptime
+
     if($lastBootTime.AddDays($uptimeThreshold) -lt $now ) {
-        $uptime = [math]::Abs( ( ($now) - ($lastBootTime) ).TotalHours )
-        return [math]::Round($uptime, 2)
+        return $uptime
     }else {
         return 0
     }
@@ -593,7 +634,7 @@ function Check-DomainTrust {
 }
 
 function Check-FreeDiskSpace {
-    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.Free/1GB -lt $diskSizeThreshold}
+    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.Free/1GB -lt $diskSizeThreshold  -and $_.DisplayRoot -notlike "\\*"}
 }
 
 function Copy-ForticlientLogs {
@@ -620,7 +661,7 @@ function Copy-ForticlientLogs {
 function Copy-ForticlientConfig {
 
     if( (Test-Path "HKLM:\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels") ) {
-        reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg"
+        reg export HKEY_LOCAL_MACHINE\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels "$DiagLogFortiClientFolder\vpn-config.reg.txt"
     }else {
         Write-Debug "No Forticlient Config available"
     }
@@ -680,10 +721,8 @@ Write-Debug systeminfo
 $systeminfo = Get-ComputerInfo
 $systeminfo | Format-List
 
-$uptime = $systeminfo.OsUptime.toString()
-$utHours = $uptime.Split('.')[0]
-$utMinutes = $uptime.Split('.')[1].Split(':')[0]
-$generalSummary.Uptime = "$utHours h, $utMinutes min"
+$uptime = Get-Uptime
+$generalSummary.Uptime = "$uptime h"
 $generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
 $generalSummary.hostname = $systeminfo.CsCaption
 
@@ -695,13 +734,16 @@ quser
 AppendReport -content (HtmlHeading -text "General info") -raw
 AppendReport -content $generalSummary
 AppendReport -content (
-    (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem"} | Select-Object Name, @{
+    (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.DisplayRoot -notlike "\\*"} | Select-Object Name, @{
         Name="Used (GB)";Expression={ [math]::Round( ($_.Used / 1GB), 2 ) }
     }, @{
         Name="Free (GB)";Expression={ [math]::Round( ($_.Free / 1GB), 2 ) }
     }
     
 )
+
+AppendReport -content (HtmlHeading -text "Forticlient Configs") -raw
+AppendReport -content (Get-ForticlientConfig)
 
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
@@ -803,7 +845,7 @@ AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDispl
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
-#Copy-ForticlientConfig
+Copy-ForticlientConfig
 Copy-CenterdeviceLogs
 
 $body = Check-KnownProblems
