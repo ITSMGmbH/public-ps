@@ -1,7 +1,7 @@
 param (
     $mailTo,
     $timeDifferencethreshold = 2, # minutes
-    $uptimeThreshold = 2, # days
+    $uptimeThreshold = 48, # hours
     $diskSizeThreshold = 20, # GB
     $freeMemoryThreshold = 15, # %
     $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
@@ -612,7 +612,7 @@ function Check-Uptime {
 
     $uptime = Get-Uptime
 
-    if($lastBootTime.AddDays($uptimeThreshold) -lt $now ) {
+    if($uptime -gt $uptimeThreshold) {
         return $uptime
     }else {
         return 0
