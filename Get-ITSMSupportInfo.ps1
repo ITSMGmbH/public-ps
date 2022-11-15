@@ -1,7 +1,7 @@
 param (
     $mailTo,
     $timeDifferencethreshold = 2, # minutes
-    $uptimeThreshold = 2, # days
+    $uptimeThreshold = 48, # hours
     $diskSizeThreshold = 20, # GB
     $freeMemoryThreshold = 15, # %
     $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
@@ -162,6 +162,7 @@ Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name hostname 
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name isAdmin -Value $null
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name Uptime -Value $null
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name lastBootTime -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name ServiceTag -Value $null
 #Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name loggedOnUsers -Value $null
 
 
@@ -611,7 +612,7 @@ function Check-Uptime {
 
     $uptime = Get-Uptime
 
-    if($lastBootTime.AddDays($uptimeThreshold) -lt $now ) {
+    if($uptime -gt $uptimeThreshold) {
         return $uptime
     }else {
         return 0
@@ -725,6 +726,7 @@ $uptime = Get-Uptime
 $generalSummary.Uptime = "$uptime h"
 $generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
 $generalSummary.hostname = $systeminfo.CsCaption
+$generalSummary.ServiceTag = $systeminfo.BiosSeralNumber
 
 
 
