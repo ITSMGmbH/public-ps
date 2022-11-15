@@ -162,6 +162,7 @@ Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name hostname 
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name isAdmin -Value $null
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name Uptime -Value $null
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name lastBootTime -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name ServiceTag -Value $null
 #Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name loggedOnUsers -Value $null
 
 
@@ -725,6 +726,7 @@ $uptime = Get-Uptime
 $generalSummary.Uptime = "$uptime h"
 $generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
 $generalSummary.hostname = $systeminfo.CsCaption
+$generalSummary.ServiceTag = $systeminfo.BiosSeralNumber
 
 
 
