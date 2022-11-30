@@ -776,7 +776,23 @@ ipconfig /all
 
 
 Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black 
-route print
+
+$upIndices = (Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object ifIndex).ifIndex
+$ipv4Routes = Get-NetRoute -AddressFamily IPv4 -InterfaceIndex $upIndices | Select-Object @{
+        Name = "Interface";Expression={(Get-NetAdapter -InterfaceIndex $_.ifIndex | Select-Object Name).Name}
+    },
+    @{
+        Name = "Interface Description"; Expression = {(Get-NetAdapter -InterfaceIndex $_.ifIndex | Select-Object InterfaceDescription).InterfaceDescription}
+    },
+    DestinationPrefix,
+    NextHop,
+    RouteMetric,
+    ifMetric
+
+AppendReport -raw -content (HtmlHeading -text "Routing")
+AppendReport -collapsible -noConsoleOut -content $ipv4Routes 
+
+Get-NetRoute | Format-Table -AutoSize -Wrap
 
 if(!$skipConnectivity) {
     Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
