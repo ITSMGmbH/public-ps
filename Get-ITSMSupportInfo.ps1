@@ -843,7 +843,7 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 })
 
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
-AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible -noConsoleOut
+AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, ProviderName, LevelDisplayName, Message) -collapsible -noConsoleOut
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
