@@ -794,6 +794,13 @@ AppendReport -collapsible -noConsoleOut -content $ipv4Routes
 
 Get-NetRoute | Format-Table -AutoSize -Wrap
 
+Write-Host "`nDNS Cache" -BackgroundColor Cyan -ForegroundColor black 
+
+AppendReport -raw -content (HtmlHeading -text "DNS Cache")
+AppendReport -collapsible -content (Get-DnsClientCache) -noConsoleOut
+
+Get-DnsClientCache | Format-Table -AutoSize -Wrap
+
 if(!$skipConnectivity) {
     Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
     $NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -ne "Disconnected"}
