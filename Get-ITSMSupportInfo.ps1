@@ -840,7 +840,7 @@ Get-NetRoute | Format-Table -AutoSize -Wrap
 Write-Host "`nDNS Cache" -BackgroundColor Cyan -ForegroundColor black 
 
 AppendReport -raw -content (HtmlHeading -text "DNS Cache")
-AppendReport -collapsible -content (Get-DnsClientCache) -noConsoleOut
+AppendReport -collapsible -content (Get-DnsClientCache | Select-Object Name, Data, TTL) -noConsoleOut
 
 Get-DnsClientCache | Format-Table -AutoSize -Wrap
 
