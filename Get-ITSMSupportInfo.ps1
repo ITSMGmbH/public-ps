@@ -436,6 +436,26 @@ function HtmlBulletPoints {
 
 }
 
+function ArrayToString {
+    param (
+        $collection,
+        $delimiter = ""
+    )
+    $string = ""
+
+    $i = 0
+    foreach ($item in $collection) {
+        $string += $item.ToString()
+        if($i -lt $collection.Count) {
+            $string += $delimiter
+        }
+        $i++
+    }
+
+    return $string
+    
+}
+
 function Get-Uptime {
     $lastBootTime = Get-Date (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
 
@@ -772,6 +792,29 @@ AppendReport -content (Get-Service | Where-Object {$_.StartType -like "*auto*" -
 
 Write-Host "`nIPConfig" -BackgroundColor Cyan -ForegroundColor black 
 ipconfig /all
+
+$adapters = Get-NetAdapter | Select-Object *
+$IPConfigs = Get-NetIPConfiguration | Select-Object *
+
+$NetConfigs = @()
+
+foreach ($adapter in $adapters) {
+    $NetConfigs += [pscustomobject]@{
+        Name = $adapter.Name
+        Description = $adapter.InterfaceDescription
+        Status = $adapter.Status
+        MAC = $adapter.MacAddress
+        IP = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).IPv4Address.IPAddress) -delimiter ", "
+        GW = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).IPV4DefaultGateway.NextHop) -delimiter ", "
+        DNS = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).DNSServer.ServerAddresses) -delimiter ", "
+    } 
+
+}
+
+AppendReport -content (HtmlHeading -text "IPConfig") -raw
+AppendReport -content $NetConfigs -collapsible -noConsoleOut
+
+$NetConfigs | Format-Table -AutoSize -Wrap
 
 
 
