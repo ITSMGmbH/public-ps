@@ -1,5 +1,17 @@
  /* Style the button that is used to open and close the collapsible content */
 
+ body {
+  font-family: 'Lucida Console';
+}
+
+tr:nth-child(even) {
+	background-color: #e2efda;
+}
+
+tr:nth-child(odd) {
+	background-color: #f2f2f2;
+}
+
  .collapsible {
    background-color: #eee;
    color: #444;
