@@ -436,6 +436,30 @@ function HtmlBulletPoints {
 
 }
 
+function ArrayToString {
+    param (
+        $collection,
+        $delimiter = ""
+    )
+    $string = ""
+
+    $i = 0
+    foreach ($item in $collection) {
+        $string += $item.ToString()
+        if($i -lt $collection.Count) {
+            $string += $delimiter
+        }
+        $i++
+    }
+
+    return $string
+    
+}
+
+function Get-Disks {
+    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.DisplayRoot -notlike "\\*" -and $_.Root.Split('\')[0] -notcontains ((Get-WmiObject Win32_CDROMDrive).Drive)}
+}
+
 function Get-Uptime {
     $lastBootTime = Get-Date (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
 
@@ -635,7 +659,7 @@ function Check-DomainTrust {
 }
 
 function Check-FreeDiskSpace {
-    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.Free/1GB -lt $diskSizeThreshold  -and $_.DisplayRoot -notlike "\\*"}
+    return Get-Disks | Where-Object {$_.Free/1GB -lt $diskSizeThreshold}
 }
 
 function Copy-ForticlientLogs {
@@ -736,7 +760,7 @@ quser
 AppendReport -content (HtmlHeading -text "General info") -raw
 AppendReport -content $generalSummary
 AppendReport -content (
-    (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.DisplayRoot -notlike "\\*"} | Select-Object Name, @{
+    Get-Disks | Select-Object Name, @{
         Name="Used (GB)";Expression={ [math]::Round( ($_.Used / 1GB), 2 ) }
     }, @{
         Name="Free (GB)";Expression={ [math]::Round( ($_.Free / 1GB), 2 ) }
@@ -773,10 +797,56 @@ AppendReport -content (Get-Service | Where-Object {$_.StartType -like "*auto*" -
 Write-Host "`nIPConfig" -BackgroundColor Cyan -ForegroundColor black 
 ipconfig /all
 
+$adapters = Get-NetAdapter | Select-Object *
+$IPConfigs = Get-NetIPConfiguration | Select-Object *
+
+$NetConfigs = @()
+
+foreach ($adapter in $adapters) {
+    $NetConfigs += [pscustomobject]@{
+        Name = $adapter.Name
+        Description = $adapter.InterfaceDescription
+        Status = $adapter.Status
+        MAC = $adapter.MacAddress
+        IP = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).IPv4Address.IPAddress) -delimiter ", "
+        GW = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).IPV4DefaultGateway.NextHop) -delimiter ", "
+        DNS = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).DNSServer.ServerAddresses) -delimiter ", "
+    } 
+
+}
+
+AppendReport -content (HtmlHeading -text "IPConfig") -raw
+AppendReport -content $NetConfigs -collapsible -noConsoleOut
+
+$NetConfigs | Format-Table -AutoSize -Wrap
+
 
 
 Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black 
-route print
+
+$upIndices = (Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object ifIndex).ifIndex
+$ipv4Routes = Get-NetRoute -AddressFamily IPv4 -InterfaceIndex $upIndices | Select-Object @{
+        Name = "Interface";Expression={(Get-NetAdapter -InterfaceIndex $_.ifIndex | Select-Object Name).Name}
+    },
+    @{
+        Name = "Interface Description"; Expression = {(Get-NetAdapter -InterfaceIndex $_.ifIndex | Select-Object InterfaceDescription).InterfaceDescription}
+    },
+    DestinationPrefix,
+    NextHop,
+    RouteMetric,
+    ifMetric
+
+AppendReport -raw -content (HtmlHeading -text "Routing")
+AppendReport -collapsible -noConsoleOut -content $ipv4Routes 
+
+Get-NetRoute | Format-Table -AutoSize -Wrap
+
+Write-Host "`nDNS Cache" -BackgroundColor Cyan -ForegroundColor black 
+
+AppendReport -raw -content (HtmlHeading -text "DNS Cache")
+AppendReport -collapsible -content (Get-DnsClientCache | Select-Object Name, Data, TTL) -noConsoleOut
+
+Get-DnsClientCache | Format-Table -AutoSize -Wrap
 
 if(!$skipConnectivity) {
     Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
@@ -843,7 +913,7 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 })
 
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
-AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, LevelDisplayName, Message) -collapsible -noConsoleOut
+AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, ProviderName, LevelDisplayName, Message) -collapsible -noConsoleOut
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
