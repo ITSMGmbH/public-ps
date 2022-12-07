@@ -456,6 +456,10 @@ function ArrayToString {
     
 }
 
+function Get-Disks {
+    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.DisplayRoot -notlike "\\*" -and $_.Root.Split('\')[0] -notcontains ((Get-WmiObject Win32_CDROMDrive).Drive)}
+}
+
 function Get-Uptime {
     $lastBootTime = Get-Date (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
 
@@ -655,7 +659,7 @@ function Check-DomainTrust {
 }
 
 function Check-FreeDiskSpace {
-    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.Free/1GB -lt $diskSizeThreshold  -and $_.DisplayRoot -notlike "\\*" -and $_.Root.Split('\')[0] -notcontains ((Get-WmiObject Win32_CDROMDrive).Drive)}
+    return Get-Disks | Where-Object {$_.Free/1GB -lt $diskSizeThreshold}
 }
 
 function Copy-ForticlientLogs {
@@ -756,7 +760,7 @@ quser
 AppendReport -content (HtmlHeading -text "General info") -raw
 AppendReport -content $generalSummary
 AppendReport -content (
-    (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.DisplayRoot -notlike "\\*"} | Select-Object Name, @{
+    Get-Disks | Select-Object Name, @{
         Name="Used (GB)";Expression={ [math]::Round( ($_.Used / 1GB), 2 ) }
     }, @{
         Name="Free (GB)";Expression={ [math]::Round( ($_.Free / 1GB), 2 ) }
