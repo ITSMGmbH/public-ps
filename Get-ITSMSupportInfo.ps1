@@ -655,7 +655,7 @@ function Check-DomainTrust {
 }
 
 function Check-FreeDiskSpace {
-    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.Free/1GB -lt $diskSizeThreshold  -and $_.DisplayRoot -notlike "\\*"}
+    return (Get-PSDrive) | Where-Object {$_.Provider.Name -eq "FileSystem" -and $_.Free/1GB -lt $diskSizeThreshold  -and $_.DisplayRoot -notlike "\\*" -and $_.Root.Split('\')[0] -notcontains ((Get-WmiObject Win32_CDROMDrive).Drive)}
 }
 
 function Copy-ForticlientLogs {
