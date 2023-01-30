@@ -151,7 +151,7 @@ $css
 $htmlEnd = "
 <script>
 $js
-</script
+</script>
 </body>
 </html>"
 
