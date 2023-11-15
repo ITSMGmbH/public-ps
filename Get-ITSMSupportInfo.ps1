@@ -773,6 +773,9 @@ AppendReport -content (
 AppendReport -content (HtmlHeading -text "Forticlient Configs") -raw
 AppendReport -content (Get-ForticlientConfig)
 
+AppendReport -content (HtmlHeading -text "Printer") -raw
+AppendReport -content (Get-Printer | Select-Object Name, Comment, PrinterStatus, Type, DriverName, PortName, JobCount) -noConsoleOut
+AppendReport -content (Get-Printer | Select-Object *) -collapsible
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
