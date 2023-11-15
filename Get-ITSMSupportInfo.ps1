@@ -163,6 +163,7 @@ Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name isAdmin -
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name Uptime -Value $null
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name lastBootTime -Value $null
 Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name ServiceTag -Value $null
+Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name PublicIp -Value $null
 #Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name loggedOnUsers -Value $null
 
 
@@ -743,6 +744,8 @@ else
 Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
 Write-Debug systeminfo
 
+$publicIp= ((Invoke-WebRequest -UseBasicParsing 'https://api.myip.com/').content | ConvertFrom-Json).ip
+
 $systeminfo = Get-ComputerInfo
 $systeminfo | Format-List
 
@@ -751,7 +754,7 @@ $generalSummary.Uptime = "$uptime h"
 $generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
 $generalSummary.hostname = $systeminfo.CsCaption
 $generalSummary.ServiceTag = $systeminfo.BiosSeralNumber
-
+$generalSummary.PublicIp = $publicIp
 
 
 Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black 
@@ -765,12 +768,14 @@ AppendReport -content (
     }, @{
         Name="Free (GB)";Expression={ [math]::Round( ($_.Free / 1GB), 2 ) }
     }
-    
 )
 
 AppendReport -content (HtmlHeading -text "Forticlient Configs") -raw
 AppendReport -content (Get-ForticlientConfig)
 
+AppendReport -content (HtmlHeading -text "Printer") -raw
+AppendReport -content (Get-Printer | Select-Object Name, Comment, PrinterStatus, Type, DriverName, PortName, JobCount) -noConsoleOut
+AppendReport -content (Get-Printer | Select-Object *) -collapsible
 
 Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
@@ -884,7 +889,7 @@ if(!$skipConnectivity) {
 
 
 Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
-((Invoke-WebRequest -UseBasicParsing 'https://api.myip.com/').content | ConvertFrom-Json).ip
+$publicIp
 
 Write-Host "`nSpeedTest" -BackgroundColor Cyan -ForegroundColor black 
 
