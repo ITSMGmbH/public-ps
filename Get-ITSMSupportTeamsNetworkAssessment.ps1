@@ -12,7 +12,7 @@
 if(-Not (Test-Path "c:\temp")) {
     New-Item -ItemType Directory c:\temp
 }
-$now = get-date -Format 'yyyymmdd-hhMMss'
+$now = (get-date).ToString("yyyyMMdd-HHmmss")
 Start-Transcript c:\temp\Teams-$now.txt
 
 cd "C:\Program Files (x86)\Microsoft Teams Network Assessment Tool"
