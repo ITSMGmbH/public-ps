@@ -23,7 +23,7 @@ cd "C:\Program Files (x86)\Microsoft Teams Network Assessment Tool"
 .\NetworkAssessmentTool.exe /interfaces | Out-Default
 .\NetworkAssessmentTool.exe /location | Out-Default
 
-Get-ChildItem "$env:LOCALAPPDATA\Microsoft Teams Network Assessment Tool\" | Where-Object {$_.Lastwritetime -gt (get-date).Adddays(-1)} | Compress-Archive -DestinationPath "c:\temp\MicrosoftTeamsNetworkAssessmentTool-$($env:COMPUTERNAME)-$($now).zip
+Get-ChildItem "$env:LOCALAPPDATA\Microsoft Teams Network Assessment Tool\" | Where-Object {$_.Lastwritetime -gt (get-date).Adddays(-1)} | Compress-Archive -DestinationPath "c:\temp\MicrosoftTeamsNetworkAssessmentTool-$($env:COMPUTERNAME)-$($now).zip"
 
 Stop-Transcript
-Compress-Archive -Path "c:\temp\Teams-$now.txt" -DestinationPath "c:\temp\MicrosoftTeamsNetworkAssessmentTool-$($env:COMPUTERNAME)-$($now).zip -Update
+Compress-Archive -Path "c:\temp\Teams-$now.txt" -DestinationPath "c:\temp\MicrosoftTeamsNetworkAssessmentTool-$($env:COMPUTERNAME)-$($now).zip" -Update
