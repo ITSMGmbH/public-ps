@@ -25,10 +25,7 @@ param (
     $smtpTo,
     $smtpSubject = "Support Script",
     $smtpFrom,
-    [switch]$skipConnectivity,
-    [switch]$simulateTimeProblem,
-    [switch]$simulateDomainTrustProblem,
-    [switch]$simulateUptimeWarning
+    [switch]$skipConnectivity
 )
 
 #########
