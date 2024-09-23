@@ -923,6 +923,11 @@ Copy-ForticlientLogs
 Copy-ForticlientConfig
 Copy-CenterdeviceLogs
 
+Start-Process gpresult -ArgumentList "/scope:user", "/h $($DiagLogFolder)\gpresult_user.html" -Wait
+if(Test-Administrator) {
+    Start-Process gpresult -Verb runas -ArgumentList "/scope:computer", "/h $($DiagLogFolder)\gpresult_computer.html" -Wait
+}
+
 $body = Check-KnownProblems
 
 Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
