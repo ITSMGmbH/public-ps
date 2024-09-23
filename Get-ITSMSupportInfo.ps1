@@ -6,7 +6,7 @@ param (
     $freeMemoryThreshold = 15, # %
     $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
     $fileName= "SupportLog",
-    $logLevel = 2,
+    $eventLogLevel = 2,
     # Verbose 	    5
     # Informational 4
     # Warning 	    3
@@ -86,7 +86,7 @@ Write-Debug "timeDifferencethreshold: $timeDifferencethreshold"
 Write-Debug "uptimeThreshold: $uptimeThreshold"
 Write-Debug "debug: $debug"
 Write-Debug "fileName: $fileName"
-Write-Debug "logLevel: $logLevel"
+Write-Debug "logLevel: $eventLogLevel"
 Write-Debug "smtpUser: $smtpUser"
 Write-Debug "smtpServer: $smtpServer"
 Write-Debug "smtpPort: $smtpPort"
@@ -910,7 +910,7 @@ $recentEventLogs = $eventLogs | where-object { $_.recordcount -AND $_.lastwritet
 $recentEvents = ( $recentEventLogs | foreach-object {
     Get-WinEvent -FilterHashtable @{
         LogName=$_.LogName
-        Level=$logLevel
+        Level=$eventLogLevel
     } -MaxEvents 15 -ErrorAction SilentlyContinue
 })
 
