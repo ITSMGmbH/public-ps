@@ -28,6 +28,10 @@ param (
     [switch]$skipConnectivity
 )
 
+if($env:skipall) {
+    return 0
+}
+
 #########
 # Autor: (c) Marco.Hahnen@ITSM.de, Marc.Nonn@itsm.de
 # Zweck: Collect Support Infos
@@ -93,9 +97,6 @@ Write-Debug "smtpPort: $smtpPort"
 Write-Debug "smtpTo: $smtpTo"
 Write-Debug "smtpSubject: $smtpSubject"
 Write-Debug "smtpFrom: $smtpFrom"
-Write-Debug "simulateTimeProblem:  $simulateTimeProblem"
-Write-Debug "simulateDomainTrustProblem: $simulateDomainTrustProblem"
-Write-Debug "simulateUptimeWarning: $simulateUptimeWarning"
 
 $showDebug
 if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
