@@ -737,12 +737,16 @@ $systeminfo | Format-List
 
 $uptime = Get-Uptime
 
+$rdpClientKey = Get-Item HKLM:"\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\Client"
+$rdpUDPDisabled = $rdpClientKey.Property -contains "fclientdisableudp"
+
 $generalSummary = [PSCustomObject]@{
     Hostname = $systeminfo.CsCaption
     IsAdmin = (Test-Administrator)
     Uptime = "$uptime h"
     LastBootTime = $systeminfo.OsLastBootUpTime
     ServiceTag = $systeminfo.BiosSeralNumber
+    "RDP UDP Disabled" = $rdpUDPDisabled
     PublicIp = $publicIp
     WindowsEdition = $systeminfo.OsName
     WindowsVersion = $systeminfo.OsVersion
