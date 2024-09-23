@@ -155,16 +155,6 @@ $js
 
 $connectivitySummarys= @()
 
-$generalSummary = New-Object -TypeName psobject 
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name hostname -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name isAdmin -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name Uptime -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name lastBootTime -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name ServiceTag -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name PublicIp -Value $null
-#Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name loggedOnUsers -Value $null
-
-
 $htmlFilePath = "$htmlFolder\report.html"
 $htmlHead | Out-File -LiteralPath $htmlFilePath -Force
 
@@ -731,12 +721,10 @@ Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black
 if(Test-Administrator)
 {
     Write-Debug "User is admin"
-    $generalSummary.isAdmin = $true
 }
 else
 {
     Write-Debug "User is not admin"
-    $generalSummary.isAdmin = $false
 }
 
 Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
@@ -748,12 +736,17 @@ $systeminfo = Get-ComputerInfo
 $systeminfo | Format-List
 
 $uptime = Get-Uptime
-$generalSummary.Uptime = "$uptime h"
-$generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
-$generalSummary.hostname = $systeminfo.CsCaption
-$generalSummary.ServiceTag = $systeminfo.BiosSeralNumber
-$generalSummary.PublicIp = $publicIp
 
+$generalSummary = [PSCustomObject]@{
+    Hostname = $systeminfo.CsCaption
+    IsAdmin = (Test-Administrator)
+    Uptime = "$uptime h"
+    LastBootTime = $systeminfo.OsLastBootUpTime
+    ServiceTag = $systeminfo.BiosSeralNumber
+    PublicIp = $publicIp
+    WindowsEdition = $systeminfo.OsName
+    WindowsVersion = $systeminfo.OsVersion
+}
 
 Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black 
 quser
