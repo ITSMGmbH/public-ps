@@ -56,6 +56,7 @@ catch [System.Management.Automation.PSInvalidOperationException] {
 $tempPath = (Get-Item $env:temp).FullName
 
 $smtpPorts = 25, 587, 465, 2525
+$fileName="ITSM-SupportLog"
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFileSuffix= "-$env:computername-$NowString"
@@ -751,6 +752,8 @@ $generalSummary = [PSCustomObject]@{
     WindowsEdition = $systeminfo.OsName
     WindowsVersion = $systeminfo.OsVersion
 }
+
+cmd /c "netsh wlan show all >$($DiagLogFolder)\netsh.txt"
 
 Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black 
 quser
