@@ -69,7 +69,7 @@ $forticlientLogPath = "$($env:ProgramFiles)\Fortinet\FortiClient\logs\trace"
 $centerDeviceLogPath = "$($env:USERPROFILE)\AppData\Local\CenterDevice\log\client.log"
 
 if(Test-Path $DiagLogFolder) {
-    Remove-Item -Recurse -Path $DiagLogFolder
+    Remove-Item -Recurse -Path $DiagLogFolder | out-null
 }
 
 if( !(Test-Path $DiagLogFolder) ) {
@@ -514,13 +514,15 @@ function Check-KnownProblems {
     $anyWarnings = $false
 
     #problems
+    <#
+    #MH 2025-03-17 API Down?
     $timeDifference = Check-TimeDifference
     if($timeDifference -ne 0) {
         $anyProblems = $true
         $problemList.Add("Time Difference $timeDifference Minutes") | Out-Null
 
     }
-
+    #>
     if(!(Check-DomainTrust)) {
         $anyProblems = $true
         $problemList.Add("Domain trustrelationship failed. Try Test-ComputerSecureChannel -Repair") | Out-Null
@@ -729,7 +731,7 @@ function Check-FreeMemory {
 
 Write-Host "Please Wait..."
 
-Write-Host "`nCheck Adminrole" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "Check Adminrole" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
 {
     Write-Debug "User is admin"
@@ -741,7 +743,7 @@ else
     $generalSummary.isAdmin = $false
 }
 
-Write-Host "`nSysteminfo" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "Systeminfo" -BackgroundColor Cyan -ForegroundColor black 
 Write-Debug systeminfo
 
 $publicIp= ((Invoke-WebRequest -UseBasicParsing 'https://api.myip.com/').content | ConvertFrom-Json).ip
@@ -757,7 +759,7 @@ $generalSummary.ServiceTag = $systeminfo.BiosSeralNumber
 $generalSummary.PublicIp = $publicIp
 
 
-Write-Host "`nLogged on Users" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "Logged on Users" -BackgroundColor Cyan -ForegroundColor black 
 quser
 
 AppendReport -content (HtmlHeading -text "General info") -raw
@@ -777,7 +779,7 @@ AppendReport -content (HtmlHeading -text "Printer") -raw
 AppendReport -content (Get-Printer | Select-Object Name, Comment, PrinterStatus, Type, DriverName, PortName, JobCount) -noConsoleOut
 AppendReport -content (Get-Printer | Select-Object *) -collapsible
 
-Write-Host "`nRunning Processes" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "Running Processes" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
 {
     Get-Process -IncludeUserName | Format-Table
@@ -787,7 +789,7 @@ else
     Get-Process | Format-Table
 }
 
-Write-Host "`nServices" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "Services" -BackgroundColor Cyan -ForegroundColor black 
 
 if($showDebug) {
     Get-Service | Format-Table
@@ -799,7 +801,7 @@ AppendReport -content (Get-Service | Select-Object DisplayName, ServiceName, Sta
 AppendReport -content (HtmlHeading -text "Stopped Auto Services") -raw
 AppendReport -content (Get-Service | Where-Object {$_.StartType -like "*auto*" -and $_.Status -like "*stop*" } | Select-Object DisplayName, ServiceName, Status, StartType)
 
-Write-Host "`nIPConfig" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "IPConfig" -BackgroundColor Cyan -ForegroundColor black 
 ipconfig /all
 
 $adapters = Get-NetAdapter | Select-Object *
@@ -825,9 +827,13 @@ AppendReport -content $NetConfigs -collapsible -noConsoleOut
 
 $NetConfigs | Format-Table -AutoSize -Wrap
 
+Write-Host "WifiNetworks" -BackgroundColor Cyan -ForegroundColor black 
+AppendReport -content (HtmlHeading -text "WifiNetworks") -raw
+$WifiNetworks = netsh wlan show interfaces
+$WifiNetworks
+AppendReport -content $WifiNetworks -raw
 
-
-Write-Host "`nRouting" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "Routing" -BackgroundColor Cyan -ForegroundColor black 
 
 $upIndices = (Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object ifIndex).ifIndex
 $ipv4Routes = Get-NetRoute -AddressFamily IPv4 -InterfaceIndex $upIndices | Select-Object @{
@@ -846,7 +852,7 @@ AppendReport -collapsible -noConsoleOut -content $ipv4Routes
 
 Get-NetRoute | Format-Table -AutoSize -Wrap
 
-Write-Host "`nDNS Cache" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "DNS Cache" -BackgroundColor Cyan -ForegroundColor black 
 
 AppendReport -raw -content (HtmlHeading -text "DNS Cache")
 AppendReport -collapsible -content (Get-DnsClientCache | Select-Object Name, Data, TTL) -noConsoleOut
@@ -854,7 +860,7 @@ AppendReport -collapsible -content (Get-DnsClientCache | Select-Object Name, Dat
 Get-DnsClientCache | Format-Table -AutoSize -Wrap
 
 if(!$skipConnectivity) {
-    Write-Host "`nConnectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
+    Write-Host "Connectivity Tests" -BackgroundColor Cyan -ForegroundColor black 
     $NetIPConfiguration = Get-NetIPConfiguration | Where-Object {$_.NetAdapter.Status -ne "Disconnected"}
     
     $dnsservers = ($NetIPConfiguration | Select-Object -ExpandProperty DNSServer | ? AddressFamily -eq "2").ServerAddresses | select -Unique
@@ -887,11 +893,10 @@ if(!$skipConnectivity) {
 }
 
 
-
-Write-Host "`nPublic IP" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "Public IP" -BackgroundColor Cyan -ForegroundColor black 
 $publicIp
 
-Write-Host "`nSpeedTest" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "SpeedTest" -BackgroundColor Cyan -ForegroundColor black 
 
 #100M Testfile
 $size = "100"
@@ -901,12 +906,15 @@ $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Comma
 
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 
+<#
+#MH 2025-03-17 wirft Fehler [Deserialized.System.Management.ManagementObject#root\cimv2\Win32_NTEventlogFile] does not contain a method named 'BackupEventlog'.
 Write-Debug "Getting Eventlogs:"
 foreach ($eventlogFile in $eventlogFiles) {
     Write-Debug $eventlogFile.LogFileName
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName)$DiagLogFileSuffix.evtx"
     $eventlogFile.BackupEventlog($path) | Out-Null
 }
+#>
 
 $eventLogs = Get-WinEvent -ListLog * -EA silentlycontinue
 $recentEventLogs = $eventLogs | where-object { $_.recordcount -AND $_.lastwritetime -gt ( (get-date).AddHours(-5) ) }
@@ -927,13 +935,15 @@ Copy-CenterdeviceLogs
 
 $body = Check-KnownProblems
 
-Write-Host "`nFinished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
+Write-Host "Finished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
 
 $htmlEnd | Out-File $htmlFilePath -Append
 
 Stop-Transcript
 
 Compress-Archive $DiagLogFolder -DestinationPath $DiagLogArchive -Force
+<#
+#MH 2025-03-17 wirft nur Fehler
 
 $sent = $false
 switch ( (Send-OutlookMail -body $body -to $mailTo) ) {
@@ -978,10 +988,10 @@ if(!$sent) {
     }
 }
 
-
+#>
 
 if(!$sent) {
-    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
+    #Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
     Invoke-Item $DiagLogFolder
     pause
 }
