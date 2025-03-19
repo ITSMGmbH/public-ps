@@ -1,5 +1,4 @@
 param (
-    $mailTo,
     $timeDifferencethreshold = 2, # minutes
     $uptimeThreshold = 48, # hours
     $diskSizeThreshold = 20, # GB
@@ -86,7 +85,6 @@ Start-Transcript -Path $DiagLogName
 
 $DebugPreference = $debug
 
-Write-Debug "mailTo: $mailTo"
 Write-Debug "timeDifferencethreshold: $timeDifferencethreshold"
 Write-Debug "uptimeThreshold: $uptimeThreshold"
 Write-Debug "debug: $debug"
@@ -306,51 +304,6 @@ function AppendReport {
     
 }
 
-function Send-OutlookMail {
-    param (
-        $subject="ITSM Support Script",
-        $to,
-        $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
-        $attachments = $DiagLogArchive
-    )
-
-    $returncode = 0
-
-    $failed = $false
-    try {
-        $Outlook = New-Object -ComObject Outlook.Application
-    }catch [System.Runtime.InteropServices.COMException] {
-        $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
-        $returncode = $HREsult
-        $failed = $true
-    }catch {
-        $returncode = -1
-        $failed = $true
-    }
-
-    if(!$failed) {
-        $Mail = $Outlook.CreateItem(0)
-        $Mail.subject=$subject
-        $Mail.To = $to
-        $Mail.HTMLBody = $body 
-        $Mail.Attachments.Add($attachments)
-
-        try {
-            $Mail.send()
-        }catch [System.Runtime.InteropServices.COMException] {
-            $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
-            $returncode = $HREsult
-            $failed = $true
-        }catch {
-            $returncode = -1
-            $failed = $true
-        }        
-    }
-
-    return $returncode
-    
-}
-
 function Send-Mail {
     param (
         $subject,
@@ -394,16 +347,18 @@ function Send-Mail {
 
     $returncode = 0
     try {
-        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred -BodyAsHtml
+        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred -BodyAsHtml -ErrorAction "Stop"
     }catch [System.Net.Mail.SmtpException] {
+        Write-Error $_
         $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
         $returncode = $HREsult
     }
     catch {
+        Write-Error $_
         $returncode = -1
     }
 
-    return $returncode   
+    return $returncode
     
 }
 
@@ -904,7 +859,7 @@ $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Comma
 
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 
-<#
+
 #MH 2025-03-17 wirft Fehler [Deserialized.System.Management.ManagementObject#root\cimv2\Win32_NTEventlogFile] does not contain a method named 'BackupEventlog'.
 Write-Debug "Getting Eventlogs:"
 foreach ($eventlogFile in $eventlogFiles) {
@@ -912,7 +867,7 @@ foreach ($eventlogFile in $eventlogFiles) {
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName)$DiagLogFileSuffix.evtx"
     $eventlogFile.BackupEventlog($path) | Out-Null
 }
-#>
+
 
 $eventLogs = Get-WinEvent -ListLog * -EA silentlycontinue
 $recentEventLogs = $eventLogs | where-object { $_.recordcount -AND $_.lastwritetime -gt ( (get-date).AddHours(-5) ) }
@@ -945,56 +900,34 @@ $htmlEnd | Out-File $htmlFilePath -Append
 Stop-Transcript
 
 Compress-Archive $DiagLogFolder -DestinationPath $DiagLogArchive -Force
-<#
-#MH 2025-03-17 wirft nur Fehler
 
-$sent = $false
-switch ( (Send-OutlookMail -body $body -to $mailTo) ) {
+
+
+$cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $smtpUser, (ConvertTo-SecureString -AsPlainText -Force -String $smtpPW)
+
+
+switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred -body $body) ) {
     0 {
         Write-Debug "Mail send succesfully"
         $sent = $true
     }
-    "80040154" {
-        Write-Debug "Outlook not available, cant send Mail"
-        break
+    1 {
+        Write-Debug "Missing Mail Paramater"
     }
-    "80004005" {
-        Write-Debug "No MailTo provided, cant send Mail"
-        break
+    2 {
+        Write-Debug "SMTP Connection failed"
     }
     -1 {
-        Write-Debug "Unknown Error, cant send Mail"
-        break
+        Write-Debug "Unknown Error"
     }
     Default {}
 }
 
-if(!$sent) {
-    $cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $smtpUser, (ConvertTo-SecureString -AsPlainText -Force -String $smtpPW)
-    
 
-    switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred -body $body) ) {
-        0 {
-            Write-Debug "Mail send succesfully"
-            $sent = $true
-        }
-        1 {
-            Write-Debug "Missing Mail Paramater"
-        }
-        2 {
-            Write-Debug "SMTP Connection failed"
-        }
-        -1 {
-            Write-Debug "Unknown Error"
-        }
-        Default {}
-    }
-}
 
-#>
 
 if(!$sent) {
-    #Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
+    Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
     Invoke-Item $DiagLogFolder
     pause
 }
