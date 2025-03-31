@@ -760,24 +760,25 @@ $generalSummary.PublicIp = $publicIp
 
 
 Write-Host "Logged on Users" -BackgroundColor Cyan -ForegroundColor black 
+AppendReport -content (HtmlHeading -text "Logged on Users") -raw
 $quser = quser
-AppendReport -content $quser -collapsible -noConsoleOut
+AppendReport -content $quser -collapsible 
 
 AppendReport -content (HtmlHeading -text "General info") -raw
-AppendReport -content $generalSummary -noConsoleOut
+AppendReport -content $generalSummary 
 AppendReport -content (
     Get-Disks | Select-Object Name, @{
         Name="Used (GB)";Expression={ [math]::Round( ($_.Used / 1GB), 2 ) }
     }, @{
         Name="Free (GB)";Expression={ [math]::Round( ($_.Free / 1GB), 2 ) }
     }
-) -noConsoleOut
+) 
 
 AppendReport -content (HtmlHeading -text "Forticlient Configs") -raw
 AppendReport -content (Get-ForticlientConfig)
 
 AppendReport -content (HtmlHeading -text "Printer") -raw
-AppendReport -content (Get-Printer | Select-Object Name, Comment, PrinterStatus, Type, DriverName, PortName, JobCount) -noConsoleOut
+AppendReport -content (Get-Printer | Select-Object Name, Comment, PrinterStatus, Type, DriverName, PortName, JobCount) 
 AppendReport -content (Get-Printer | Select-Object *) -collapsible
 
 Write-Host "Running Processes" -BackgroundColor Cyan -ForegroundColor black 
@@ -850,14 +851,14 @@ $ipv4Routes = Get-NetRoute -AddressFamily IPv4 -InterfaceIndex $upIndices | Sele
     ifMetric
 
 AppendReport -raw -content (HtmlHeading -text "Routing")
-AppendReport -collapsible -noConsoleOut -content $ipv4Routes 
+AppendReport -collapsible -content $ipv4Routes 
 
 Get-NetRoute | Format-Table -AutoSize -Wrap
 
 Write-Host "DNS Cache" -BackgroundColor Cyan -ForegroundColor black 
 
 AppendReport -raw -content (HtmlHeading -text "DNS Cache")
-AppendReport -collapsible -content (Get-DnsClientCache | Select-Object Name, Data, TTL) -noConsoleOut
+AppendReport -collapsible -content (Get-DnsClientCache | Select-Object Name, Data, TTL) 
 
 Get-DnsClientCache | Format-Table -AutoSize -Wrap
 
@@ -928,7 +929,7 @@ $recentEvents = ( $recentEventLogs | foreach-object {
 })
 
 AppendReport -content (HtmlHeading -text "Recent Events") -raw
-AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, ProviderName, LevelDisplayName, Message) -collapsible -noConsoleOut
+AppendReport -content ($recentEvents | Select-Object TimeCreated, Id, ProviderName, LevelDisplayName, Message | sort TimeCreated) -collapsible -noConsoleOut
 
 Write-Debug "Copying Forticlient Logs"
 Copy-ForticlientLogs
