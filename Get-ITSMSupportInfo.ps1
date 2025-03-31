@@ -804,7 +804,11 @@ AppendReport -content (HtmlHeading -text "Stopped Auto Services") -raw
 AppendReport -content (Get-Service | Where-Object {$_.StartType -like "*auto*" -and $_.Status -like "*stop*" } | Select-Object DisplayName, ServiceName, Status, StartType)
 
 Write-Host "IPConfig" -BackgroundColor Cyan -ForegroundColor black 
+AppendReport -content (HtmlHeading -text "IPConfig") -raw
+$IPConfigs = Get-NetIPConfiguration -Detailed -All
+AppendReport -content $IPConfigs -collapsible
 
+<# Altes Zeug das nicht alle Infos liefert
 [string]$IPConfigOld = ipconfig /all
 $adapters = Get-NetAdapter | Select-Object *
 $IPConfigs = Get-NetIPConfiguration | Select-Object *
@@ -835,7 +839,7 @@ AppendReport -content (HtmlHeading -text "WifiNetworks") -raw
 $WifiNetworks = netsh wlan show interfaces
 $WifiNetworks
 AppendReport -content $WifiNetworks -raw
-
+#>
 Write-Host "Routing" -BackgroundColor Cyan -ForegroundColor black 
 
 $upIndices = (Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object ifIndex).ifIndex
