@@ -73,11 +73,11 @@ if(Test-Path $DiagLogFolder) {
 }
 
 if( !(Test-Path $DiagLogFolder) ) {
-    New-Item -ItemType Directory $DiagLogFolder
+    New-Item -ItemType Directory $DiagLogFolder | out-null
 }
 
 if( !(Test-Path $htmlFolder) ) {
-    New-Item -ItemType Directory $htmlFolder
+    New-Item -ItemType Directory $htmlFolder  | out-null
 }
 
 Start-Transcript -Path $DiagLogName
@@ -760,17 +760,18 @@ $generalSummary.PublicIp = $publicIp
 
 
 Write-Host "Logged on Users" -BackgroundColor Cyan -ForegroundColor black 
-quser
+$quser = quser
+AppendReport -content $quser -collapsible -noConsoleOut
 
 AppendReport -content (HtmlHeading -text "General info") -raw
-AppendReport -content $generalSummary
+AppendReport -content $generalSummary -noConsoleOut
 AppendReport -content (
     Get-Disks | Select-Object Name, @{
         Name="Used (GB)";Expression={ [math]::Round( ($_.Used / 1GB), 2 ) }
     }, @{
         Name="Free (GB)";Expression={ [math]::Round( ($_.Free / 1GB), 2 ) }
     }
-)
+) -noConsoleOut
 
 AppendReport -content (HtmlHeading -text "Forticlient Configs") -raw
 AppendReport -content (Get-ForticlientConfig)
@@ -803,7 +804,7 @@ AppendReport -content (Get-Service | Where-Object {$_.StartType -like "*auto*" -
 
 Write-Host "IPConfig" -BackgroundColor Cyan -ForegroundColor black 
 
-$IPConfigOld = ipconfig /all
+[string]$IPConfigOld = ipconfig /all
 $adapters = Get-NetAdapter | Select-Object *
 $IPConfigs = Get-NetIPConfiguration | Select-Object *
 
@@ -823,8 +824,8 @@ foreach ($adapter in $adapters) {
 }
 
 AppendReport -content (HtmlHeading -text "IPConfig") -raw
-AppendReport -content $IPConfigOld -collapsible -noConsoleOut 
-AppendReport -content $NetConfigs -collapsible -noConsoleOut
+AppendReport -content $IPConfigOld -collapsible 
+AppendReport -content $NetConfigs -collapsible
 
 $NetConfigs | Format-Table -AutoSize -Wrap
 
