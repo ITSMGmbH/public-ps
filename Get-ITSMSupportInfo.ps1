@@ -802,8 +802,8 @@ AppendReport -content (HtmlHeading -text "Stopped Auto Services") -raw
 AppendReport -content (Get-Service | Where-Object {$_.StartType -like "*auto*" -and $_.Status -like "*stop*" } | Select-Object DisplayName, ServiceName, Status, StartType)
 
 Write-Host "IPConfig" -BackgroundColor Cyan -ForegroundColor black 
-ipconfig /all
 
+$IPConfigOld = ipconfig /all
 $adapters = Get-NetAdapter | Select-Object *
 $IPConfigs = Get-NetIPConfiguration | Select-Object *
 
@@ -823,6 +823,7 @@ foreach ($adapter in $adapters) {
 }
 
 AppendReport -content (HtmlHeading -text "IPConfig") -raw
+AppendReport -content $IPConfigOld -collapsible -noConsoleOut 
 AppendReport -content $NetConfigs -collapsible -noConsoleOut
 
 $NetConfigs | Format-Table -AutoSize -Wrap
