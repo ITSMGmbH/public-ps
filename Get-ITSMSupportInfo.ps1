@@ -1,12 +1,11 @@
 param (
-    $mailTo,
     $timeDifferencethreshold = 2, # minutes
     $uptimeThreshold = 48, # hours
     $diskSizeThreshold = 20, # GB
     $freeMemoryThreshold = 15, # %
     $debug = "SilentlyContinue", # Stop, Inquire, Continue, SilentlyContinue
     $fileName= "SupportLog",
-    $logLevel = 2,
+    $eventLogLevel = 2,
     # Verbose 	    5
     # Informational 4
     # Warning 	    3
@@ -18,18 +17,13 @@ param (
     # INFO
     # WARN
     # ERROR
-    $smtpUser,
-    $smtpPW,
-    $smtpServer,
-    $smtpPort,
-    $smtpTo,
-    $smtpSubject = "Support Script",
-    $smtpFrom,
     [switch]$skipConnectivity,
-    [switch]$simulateTimeProblem,
-    [switch]$simulateDomainTrustProblem,
-    [switch]$simulateUptimeWarning
+    [string]$NTPServer = "de.pool.ntp.org"
 )
+
+if($env:skipall) {
+    return 0
+}
 
 #########
 # Autor: (c) Marco.Hahnen@ITSM.de, Marc.Nonn@itsm.de
@@ -54,7 +48,7 @@ catch [System.Management.Automation.PSInvalidOperationException] {
 
 $tempPath = (Get-Item $env:temp).FullName
 
-$smtpPorts = 25, 587, 465, 2525
+$fileName="ITSM-SupportLog"
 
 $NowString = get-date -Format "MMddyyyy-HHmmss"
 $DiagLogFileSuffix= "-$env:computername-$NowString"
@@ -84,21 +78,11 @@ Start-Transcript -Path $DiagLogName
 
 $DebugPreference = $debug
 
-Write-Debug "mailTo: $mailTo"
 Write-Debug "timeDifferencethreshold: $timeDifferencethreshold"
 Write-Debug "uptimeThreshold: $uptimeThreshold"
 Write-Debug "debug: $debug"
 Write-Debug "fileName: $fileName"
-Write-Debug "logLevel: $logLevel"
-Write-Debug "smtpUser: $smtpUser"
-Write-Debug "smtpServer: $smtpServer"
-Write-Debug "smtpPort: $smtpPort"
-Write-Debug "smtpTo: $smtpTo"
-Write-Debug "smtpSubject: $smtpSubject"
-Write-Debug "smtpFrom: $smtpFrom"
-Write-Debug "simulateTimeProblem:  $simulateTimeProblem"
-Write-Debug "simulateDomainTrustProblem: $simulateDomainTrustProblem"
-Write-Debug "simulateUptimeWarning: $simulateUptimeWarning"
+Write-Debug "logLevel: $eventLogLevel"
 
 $showDebug
 if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
@@ -106,11 +90,6 @@ if( ("Stop", "Inquire", "Continue") -contains $DebugPreference) {
 }else {
     $showDebug = $false
 }
-
-if($null -ne $smtpPort) {
-    $smtpPorts = $smtpPort
-}
-
 
 $centerDeviceLogKeywords=$null
 switch ($centerDeviceLogLevel) {
@@ -156,16 +135,6 @@ $js
 </html>"
 
 $connectivitySummarys= @()
-
-$generalSummary = New-Object -TypeName psobject 
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name hostname -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name isAdmin -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name Uptime -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name lastBootTime -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name ServiceTag -Value $null
-Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name PublicIp -Value $null
-#Add-Member -InputObject $generalSummary -MemberType NoteProperty -Name loggedOnUsers -Value $null
-
 
 $htmlFilePath = "$htmlFolder\report.html"
 $htmlHead | Out-File -LiteralPath $htmlFilePath -Force
@@ -316,108 +285,6 @@ function AppendReport {
     }
     
 }
-
-function Send-OutlookMail {
-    param (
-        $subject="ITSM Support Script",
-        $to,
-        $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
-        $attachments = $DiagLogArchive
-    )
-
-    $returncode = 0
-
-    $failed = $false
-    try {
-        $Outlook = New-Object -ComObject Outlook.Application
-    }catch [System.Runtime.InteropServices.COMException] {
-        $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
-        $returncode = $HREsult
-        $failed = $true
-    }catch {
-        $returncode = -1
-        $failed = $true
-    }
-
-    if(!$failed) {
-        $Mail = $Outlook.CreateItem(0)
-        $Mail.subject=$subject
-        $Mail.To = $to
-        $Mail.HTMLBody = $body 
-        $Mail.Attachments.Add($attachments)
-
-        try {
-            $Mail.send()
-        }catch [System.Runtime.InteropServices.COMException] {
-            $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
-            $returncode = $HREsult
-            $failed = $true
-        }catch {
-            $returncode = -1
-            $failed = $true
-        }        
-    }
-
-    return $returncode
-    
-}
-
-function Send-Mail {
-    param (
-        $subject,
-        $to,
-        $from,
-        $port,
-        $server,
-        $body = "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)",
-        $attachments = $DiagLogArchive,
-        $mailCred
-    )
-
-    $portOpen = $false
-
-    if($null -eq $from -or $null -eq $to -or $null -eq $port -or $null -eq $server) {
-        return 1
-    }
-    
-    if($port.Count -eq 1) {
-        if( (Test-NetConnection $server -Port $port).TcpTestSucceeded ) { 
-            $portOpen = $true 
-        }else {
-            $port = $smtpPorts
-        }
-    } 
-    
-    if(!$portOpen) {
-        foreach ($p in $port) {
-            if( (Test-NetConnection $server -Port $p).TcpTestSucceeded ) {
-                $port = $p
-                $portOpen = $true
-                break
-            }
-        }
-    }
-
-    if(!$portOpen) {
-        Write-Debug "No SMTP Port Open"
-        return 2
-    }
-
-    $returncode = 0
-    try {
-        Send-MailMessage -Subject $subject -To $to -From $from -Body $body -SmtpServer $server -Attachments $attachments -UseSsl -Credential $mailCred -BodyAsHtml
-    }catch [System.Net.Mail.SmtpException] {
-        $HREsult = [System.Convert]::ToString( ($_.Exception.hresult), 16 )
-        $returncode = $HREsult
-    }
-    catch {
-        $returncode = -1
-    }
-
-    return $returncode   
-    
-}
-
 function HtmlBulletPoints {
     param (
         $items
@@ -435,26 +302,6 @@ function HtmlBulletPoints {
         return ""
     }
 
-}
-
-function ArrayToString {
-    param (
-        $collection,
-        $delimiter = ""
-    )
-    $string = ""
-
-    $i = 0
-    foreach ($item in $collection) {
-        $string += $item.ToString()
-        if($i -lt $collection.Count) {
-            $string += $delimiter
-        }
-        $i++
-    }
-
-    return $string
-    
 }
 
 function Get-Disks {
@@ -505,7 +352,6 @@ function Get-ForticlientConfig {
 
 function Check-KnownProblems {
     #setup
-    $mailBody = HtmlHeading -text "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)"
     $problemReport = HtmlHeading -text "Problems detected"
     $warningReport = HtmlHeading -text "Warnings"
     $problemList = New-Object -TypeName 'System.Collections.ArrayList'
@@ -514,22 +360,16 @@ function Check-KnownProblems {
     $anyWarnings = $false
 
     #problems
-    <#
-    #MH 2025-03-17 API Down?
     $timeDifference = Check-TimeDifference
     if($timeDifference -ne 0) {
         $anyProblems = $true
         $problemList.Add("Time Difference $timeDifference Minutes") | Out-Null
-
     }
-    #>
+    
     if(!(Check-DomainTrust)) {
         $anyProblems = $true
         $problemList.Add("Domain trustrelationship failed. Try Test-ComputerSecureChannel -Repair") | Out-Null
     }
-
-
-
 
 
     #warnings
@@ -570,57 +410,37 @@ function Check-KnownProblems {
 
 
     #output
-    if($problemList.Count -gt 0 ) {
-        Write-Debug "Problems detected:"
-        $problemList | Format-List | Out-Host
-    }
 
     if($warningList.Count -gt 0 ) {
-        Write-Debug "Warnings:"
+        Write-Host -BackgroundColor Yellow -ForegroundColor Black "Warnings:"
         $warningList | Format-List | Out-Host
     }
-    
-    $problemReport += HtmlBulletPoints -items $problemList
-    $warningReport += HtmlBulletPoints -items $warningList
 
+    if($problemList.Count -gt 0 ) {
+        Write-Host -BackgroundColor Red -ForegroundColor White "Problems detected:"
+        $problemList | Format-List | Out-Host
+    }
+    
     if($anyProblems) {
+        $problemReport += HtmlBulletPoints -items $problemList
         AppendReport -content $problemReport -raw | Out-Null
-        $mailBody += $problemReport
     }
 
     if($anyWarnings) {
+        $warningReport += HtmlBulletPoints -items $warningList
         AppendReport -content $warningReport -raw | Out-Null
-        $mailBody += $warningReport
     }
 
-    return $mailBody
 }
 
 function Check-TimeDifference {
 
-    $worldTimeRequest = $null
     $timeApiRequest = $null
     $networktime = $null
 
-    try {
-        $worldTimeRequest = ( ( (Invoke-WebRequest -UseBasicParsing "http://worldtimeapi.org/api/timezone/Europe/Berlin").content) | ConvertFrom-Json)
-    }catch {
-        $timeApiRequest = ( ( (Invoke-WebRequest -UseBasicParsing "https://www.timeapi.io/api/Time/current/zone?timeZone=Europe/Amsterdam").content) | ConvertFrom-Json)
-    }
+    $networktime = Get-NTPTime -NTPServer $NTPServer
 
-
-    if($null -eq $worldTimeRequest) {
-        $networktime = Get-Date $timeApiRequest.datetime
-    }else {
-        $networktime = Get-Date  $worldTimeRequest.datetime 
-    }
-    
-    if($simulateTimeProblem) {
-        $localtime = (Get-Date).AddMinutes(15)
-    }else {
-        $localtime = Get-Date
-    }
-    $timeDifference = [math]::Abs( ( ($networktime) - ($localtime) ).TotalMinutes)
+    $timeDifference = [math]::Abs( ( ($networktime) - (Get-Date) ).TotalMinutes)
     
     if( $timeDifference -gt $timeDifferencethreshold) {
         return [math]::Round($timeDifference, 2)
@@ -729,18 +549,47 @@ function Check-FreeMemory {
     return $percent
 }
 
+function Get-NTPTime {
+    param (
+        [Parameter(Mandatory)]
+        [string]
+        $NTPServer
+    )
+
+    #https://chrisjwarwick.wordpress.com/2012/08/26/getting-ntpsntp-network-time-with-powershell/
+
+    [Byte[]]$NtpData = ,0 * 48
+    $NtpData[0] = 0x1B  
+
+    $Socket = New-Object Net.Sockets.Socket([Net.Sockets.AddressFamily]::InterNetwork,
+    [Net.Sockets.SocketType]::Dgram,
+    [Net.Sockets.ProtocolType]::Udp)
+
+    $Socket.Connect($NTPServer,123)
+    [Void]$Socket.Send($NtpData)
+    [Void]$Socket.Receive($NtpData)
+
+    $Socket.Close()
+
+    $IntPart=0;  Foreach ($Byte in $NtpData[40..43]) {$IntPart  = $IntPart  * 256 + $Byte}
+    $FracPart=0; Foreach ($Byte in $NtpData[44..47]) {$FracPart = $FracPart * 256 + $Byte}
+
+    [UInt64]$Milliseconds = $IntPart * 1000 + ($FracPart * 1000 / 0x100000000)
+
+    (New-Object DateTime(1900,1,1,0,0,0,[DateTimeKind]::Utc)).AddMilliseconds($Milliseconds).ToLocalTime()
+    
+}
+
 Write-Host "Please Wait..."
 
 Write-Host "Check Adminrole" -BackgroundColor Cyan -ForegroundColor black 
 if(Test-Administrator)
 {
     Write-Debug "User is admin"
-    $generalSummary.isAdmin = $true
 }
 else
 {
     Write-Debug "User is not admin"
-    $generalSummary.isAdmin = $false
 }
 
 Write-Host "Systeminfo" -BackgroundColor Cyan -ForegroundColor black 
@@ -752,12 +601,23 @@ $systeminfo = Get-ComputerInfo
 $systeminfo | Format-List
 
 $uptime = Get-Uptime
-$generalSummary.Uptime = "$uptime h"
-$generalSummary.lastBootTime = $systeminfo.OsLastBootUpTime
-$generalSummary.hostname = $systeminfo.CsCaption
-$generalSummary.ServiceTag = $systeminfo.BiosSeralNumber
-$generalSummary.PublicIp = $publicIp
 
+$rdpClientKey = Get-Item HKLM:"\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\Client"
+$rdpUDPDisabled = $rdpClientKey.Property -contains "fclientdisableudp"
+
+$generalSummary = [PSCustomObject]@{
+    Hostname = $systeminfo.CsCaption
+    IsAdmin = (Test-Administrator)
+    Uptime = "$uptime h"
+    LastBootTime = $systeminfo.OsLastBootUpTime
+    ServiceTag = $systeminfo.BiosSeralNumber
+    "RDP UDP Disabled" = $rdpUDPDisabled
+    PublicIp = $publicIp
+    WindowsEdition = $systeminfo.OsName
+    WindowsVersion = $systeminfo.OsVersion
+}
+
+cmd /c "netsh wlan show all >$($DiagLogFolder)\netsh.txt"
 
 Write-Host "Logged on Users" -BackgroundColor Cyan -ForegroundColor black 
 AppendReport -content (HtmlHeading -text "Logged on Users") -raw
@@ -815,18 +675,20 @@ $IPConfigs = Get-NetIPConfiguration | Select-Object *
 
 $NetConfigs = @()
 
+$OFS = ", "
 foreach ($adapter in $adapters) {
     $NetConfigs += [pscustomobject]@{
         Name = $adapter.Name
         Description = $adapter.InterfaceDescription
         Status = $adapter.Status
         MAC = $adapter.MacAddress
-        IP = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).IPv4Address.IPAddress) -delimiter ", "
-        GW = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).IPV4DefaultGateway.NextHop) -delimiter ", "
-        DNS = ArrayToString -collection (($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).DNSServer.ServerAddresses) -delimiter ", "
+        IP = [string](($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).IPv4Address.IPAddress)
+        GW = [string](($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).IPV4DefaultGateway.NextHop)
+        DNS = [string](($IPConfigs | Where-Object {$_.NetAdapter.ifIndex -eq $adapter.ifIndex}).DNSServer.ServerAddresses)
     } 
 
 }
+$OFS = " "
 
 AppendReport -content (HtmlHeading -text "IPConfig") -raw
 AppendReport -content $IPConfigOld -collapsible 
@@ -913,22 +775,28 @@ $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Comma
 
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 
-<#
-#MH 2025-03-17 wirft Fehler [Deserialized.System.Management.ManagementObject#root\cimv2\Win32_NTEventlogFile] does not contain a method named 'BackupEventlog'.
 Write-Debug "Getting Eventlogs:"
+
+$eventerrorlist = [System.Collections.ArrayList]::New()
+$eventerror = $false
 foreach ($eventlogFile in $eventlogFiles) {
     Write-Debug $eventlogFile.LogFileName
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName)$DiagLogFileSuffix.evtx"
-    $eventlogFile.BackupEventlog($path) | Out-Null
+    try {
+        $eventlogFile.BackupEventlog($path) | Out-Null
+    }catch {
+        $eventerror = $true
+        $eventerrorlist.Add($eventlogFile.name)
+    }
+    
 }
-#>
 
 $eventLogs = Get-WinEvent -ListLog * -EA silentlycontinue
 $recentEventLogs = $eventLogs | where-object { $_.recordcount -AND $_.lastwritetime -gt ( (get-date).AddHours(-5) ) }
 $recentEvents = ( $recentEventLogs | foreach-object {
     Get-WinEvent -FilterHashtable @{
         LogName=$_.LogName
-        Level=$logLevel
+        Level=$eventLogLevel
     } -MaxEvents 15 -ErrorAction SilentlyContinue
 })
 
@@ -940,7 +808,12 @@ Copy-ForticlientLogs
 Copy-ForticlientConfig
 Copy-CenterdeviceLogs
 
-$body = Check-KnownProblems
+Start-Process gpresult -ArgumentList "/scope:user", "/h $($DiagLogFolder)\gpresult_user.html" -Wait
+if(Test-Administrator) {
+    Start-Process gpresult -Verb runas -ArgumentList "/scope:computer", "/h $($DiagLogFolder)\gpresult_computer.html" -Wait
+}
+
+Check-KnownProblems
 
 Write-Host "Finished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
 
@@ -949,56 +822,15 @@ $htmlEnd | Out-File $htmlFilePath -Append
 Stop-Transcript
 
 Compress-Archive $DiagLogFolder -DestinationPath $DiagLogArchive -Force
-<#
-#MH 2025-03-17 wirft nur Fehler
 
-$sent = $false
-switch ( (Send-OutlookMail -body $body -to $mailTo) ) {
-    0 {
-        Write-Debug "Mail send succesfully"
-        $sent = $true
-    }
-    "80040154" {
-        Write-Debug "Outlook not available, cant send Mail"
-        break
-    }
-    "80004005" {
-        Write-Debug "No MailTo provided, cant send Mail"
-        break
-    }
-    -1 {
-        Write-Debug "Unknown Error, cant send Mail"
-        break
-    }
-    Default {}
+Write-Host -ForegroundColor White -BackgroundColor Red "Logs $DiagLogFolder"
+
+if($eventerror) {
+    Write-Host -BackgroundColor Red -ForegroundColor White "Following eventlogs could not be saved:"
+    $OFS = ", "
+    $eventerrorlist
+    $OFS = " "
 }
 
-if(!$sent) {
-    $cred = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $smtpUser, (ConvertTo-SecureString -AsPlainText -Force -String $smtpPW)
-    
-
-    switch ( (Send-Mail -to $smtpTo -subject $smtpSubject -from $smtpFrom -port $smtpPort -server $smtpServer -mailCred $cred -body $body) ) {
-        0 {
-            Write-Debug "Mail send succesfully"
-            $sent = $true
-        }
-        1 {
-            Write-Debug "Missing Mail Paramater"
-        }
-        2 {
-            Write-Debug "SMTP Connection failed"
-        }
-        -1 {
-            Write-Debug "Unknown Error"
-        }
-        Default {}
-    }
-}
-
-#>
-
-if(!$sent) {
-    #Write-Host -ForegroundColor White -BackgroundColor Red "Couldnt send mail, copy Zip at $DiagLogFolder manually!"
-    Invoke-Item $DiagLogFolder
-    pause
-}
+Invoke-Item $DiagLogFolder
+pause
