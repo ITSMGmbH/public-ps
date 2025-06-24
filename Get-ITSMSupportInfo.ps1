@@ -17,7 +17,8 @@ param (
     # INFO
     # WARN
     # ERROR
-    [switch]$skipConnectivity
+    [switch]$skipConnectivity,
+    [string]$NTPServer = "de.pool.ntp.org"
 )
 
 if($env:skipall) {
@@ -351,7 +352,6 @@ function Get-ForticlientConfig {
 
 function Check-KnownProblems {
     #setup
-    $mailBody = HtmlHeading -text "Sent from $($env:USERDNSDOMAIN)\$($env:USERNAME)@$($env:COMPUTERNAME)"
     $problemReport = HtmlHeading -text "Problems detected"
     $warningReport = HtmlHeading -text "Warnings"
     $problemList = New-Object -TypeName 'System.Collections.ArrayList'
@@ -422,10 +422,12 @@ function Check-KnownProblems {
     }
     
     if($anyProblems) {
+        $problemReport += HtmlBulletPoints -items $problemList
         AppendReport -content $problemReport -raw | Out-Null
     }
 
     if($anyWarnings) {
+        $warningReport += HtmlBulletPoints -items $warningList
         AppendReport -content $warningReport -raw | Out-Null
     }
 
@@ -436,11 +438,9 @@ function Check-TimeDifference {
     $timeApiRequest = $null
     $networktime = $null
 
-    $timeApiRequest = ( ( (Invoke-WebRequest -UseBasicParsing "https://www.timeapi.io/api/Time/current/zone?timeZone=Europe/Amsterdam").content) | ConvertFrom-Json)
+    $networktime = Get-NTPTime -NTPServer $NTPServer
 
-    $networktime = Get-Date  $timeApiRequest.datetime 
-
-    $timeDifference = [math]::Abs( ( ($networktime) - ($localtime) ).TotalMinutes)
+    $timeDifference = [math]::Abs( ( ($networktime) - (Get-Date) ).TotalMinutes)
     
     if( $timeDifference -gt $timeDifferencethreshold) {
         return [math]::Round($timeDifference, 2)
@@ -547,6 +547,37 @@ function Check-FreeMemory {
     $freeRAM = (Get-CIMInstance Win32_OperatingSystem | Select FreePhysicalMemory).FreePhysicalMemory / 1MB
     $percent = [Math]::Round(($totalRAM / $freeRAM), 2) * 10
     return $percent
+}
+
+function Get-NTPTime {
+    param (
+        [Parameter(Mandatory)]
+        [string]
+        $NTPServer
+    )
+
+    #https://chrisjwarwick.wordpress.com/2012/08/26/getting-ntpsntp-network-time-with-powershell/
+
+    [Byte[]]$NtpData = ,0 * 48
+    $NtpData[0] = 0x1B  
+
+    $Socket = New-Object Net.Sockets.Socket([Net.Sockets.AddressFamily]::InterNetwork,
+    [Net.Sockets.SocketType]::Dgram,
+    [Net.Sockets.ProtocolType]::Udp)
+
+    $Socket.Connect($NTPServer,123)
+    [Void]$Socket.Send($NtpData)
+    [Void]$Socket.Receive($NtpData)
+
+    $Socket.Close()
+
+    $IntPart=0;  Foreach ($Byte in $NtpData[40..43]) {$IntPart  = $IntPart  * 256 + $Byte}
+    $FracPart=0; Foreach ($Byte in $NtpData[44..47]) {$FracPart = $FracPart * 256 + $Byte}
+
+    [UInt64]$Milliseconds = $IntPart * 1000 + ($FracPart * 1000 / 0x100000000)
+
+    (New-Object DateTime(1900,1,1,0,0,0,[DateTimeKind]::Utc)).AddMilliseconds($Milliseconds).ToLocalTime()
+    
 }
 
 Write-Host "Please Wait..."
@@ -738,12 +769,20 @@ $wc = New-Object System.Net.WebClient; "{0:N2} Mbit/sec" -f ((100/(Measure-Comma
 $eventlogFiles = Get-WmiObject -Class Win32_NTEventlogFile
 
 Write-Debug "Getting Eventlogs:"
+
+$eventerrorlist = [System.Collections.ArrayList]::New()
+$eventerror = $false
 foreach ($eventlogFile in $eventlogFiles) {
     Write-Debug $eventlogFile.LogFileName
     $path= "$DiagLogFolder\$($eventlogFile.LogFileName)$DiagLogFileSuffix.evtx"
-    $eventlogFile.BackupEventlog($path) | Out-Null
+    try {
+        $eventlogFile.BackupEventlog($path) | Out-Null
+    }catch {
+        $eventerror = $true
+        $eventerrorlist.Add($eventlogFile.name)
+    }
+    
 }
-
 
 $eventLogs = Get-WinEvent -ListLog * -EA silentlycontinue
 $recentEventLogs = $eventLogs | where-object { $_.recordcount -AND $_.lastwritetime -gt ( (get-date).AddHours(-5) ) }
@@ -767,7 +806,7 @@ if(Test-Administrator) {
     Start-Process gpresult -Verb runas -ArgumentList "/scope:computer", "/h $($DiagLogFolder)\gpresult_computer.html" -Wait
 }
 
-$body = Check-KnownProblems
+Check-KnownProblems
 
 Write-Host "Finished. Log written to $DiagLogName" -BackgroundColor Cyan -ForegroundColor black 
 
@@ -778,5 +817,13 @@ Stop-Transcript
 Compress-Archive $DiagLogFolder -DestinationPath $DiagLogArchive -Force
 
 Write-Host -ForegroundColor White -BackgroundColor Red "Logs $DiagLogFolder"
+
+if($eventerror) {
+    Write-Host -BackgroundColor Red -ForegroundColor White "Following eventlogs could not be saved:"
+    $OFS = ", "
+    $eventerrorlist
+    $OFS = " "
+}
+
 Invoke-Item $DiagLogFolder
 pause
